@@ -6,10 +6,12 @@ using IntegrationHub.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace IntegrationHub.Tests;
 
+[Collection("HubDatabase")]
 public sealed class ConfigurationApiTests
 {
     [Fact]
@@ -28,6 +30,8 @@ public sealed class ConfigurationApiTests
             builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
         });
         using var client = factory.CreateClient();
+        using (var migrationScope = factory.Services.CreateScope())
+            await migrationScope.ServiceProvider.GetRequiredService<HubDbContext>().Database.MigrateAsync();
 
         var request = new ConnectorWriteRequest("Integration test source", "restOrdersV1", "source",
             new ConnectorConfiguration(1, "http://localhost:8081/commerce", "apiKeyHeader", 100, 10),
@@ -61,7 +65,10 @@ public sealed class ConfigurationApiTests
         var destinationId = (await destinationCreated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var integration = new IntegrationWriteRequest("Orders", id, destinationId, "orders",
             new MappingConfiguration(1,
-            [new("orderNumber", "externalOrderId", true, null), new("total", "amount", true, "decimal")]),
+            [new("orderNumber", "externalOrderId", true, null),
+             new("customer.email", "customerEmail", true, "trim"),
+             new("total", "amount", true, "decimal"),
+             new("placedAt", "placedAtUtc", true, "utcDate")]),
             new ValidationConfiguration(1, 0), new RetryPolicy(4, 2, 60, 2), true);
         var integrationCreated = await client.PostAsJsonAsync("/api/v1/integrations", integration);
         Assert.Equal(HttpStatusCode.Created, integrationCreated.StatusCode);

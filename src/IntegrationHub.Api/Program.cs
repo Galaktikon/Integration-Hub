@@ -1,5 +1,7 @@
 using IntegrationHub.Api;
 using IntegrationHub.Infrastructure;
+using IntegrationHub.Application;
+using IntegrationHub.Rest;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,7 +9,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 if (!builder.Environment.IsDevelopment() && args.FirstOrDefault() is not "migrate")
-    throw new InvalidOperationException("Phase 1 has no admin authentication. Run this host only in Development until Phase 5 adds authentication.");
+    throw new InvalidOperationException("Admin authentication arrives in Phase 5. Run this host only in Development until then.");
 
 var connectionString = builder.Configuration.GetConnectionString("Hub");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -18,6 +20,8 @@ builder.Services.AddDbContext<HubDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddSingleton(_ => new SecretProtector(
     builder.Configuration["Security:EncryptionKey"] ?? throw new InvalidOperationException("Security:EncryptionKey is required.")));
 builder.Services.AddHostedService<WorkerHost>();
+builder.Services.AddScoped<SyncProcessor>();
+builder.Services.AddScoped<IOrderConnectorFactory, RestOrderConnectorFactory>();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options => options.AddPolicy("admin-ui", policy =>
@@ -52,6 +56,7 @@ app.MapGet("/api/v1/health/ready", async (HubDbContext db, CancellationToken can
         : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 
 app.MapConfigurationEndpoints();
+app.MapRunEndpoints();
 app.Run();
 
 public partial class Program;

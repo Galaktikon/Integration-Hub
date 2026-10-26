@@ -1,6 +1,6 @@
 # API contracts
 
-Status: Phase 0 contract, 2026-10-26. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
+Status: Phase 0 target contract, 2026-10-26. Phases 1–3 implement configuration, manual run creation, run history, record details, and attempts. Schedule, connector test, cancellation, and retry routes remain planned. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
 
 ## Authentication and general behavior
 

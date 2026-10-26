@@ -18,6 +18,12 @@ public interface IOrderDestination
     Task<ErpWriteResult> UpsertAsync(Guid integrationId, string sourceRecordId, ErpOrder order, CancellationToken cancellationToken);
 }
 
+public interface IOrderConnectorFactory
+{
+    IOrderSource CreateSource(ConnectorConfiguration configuration, string apiKey);
+    IOrderDestination CreateDestination(ConnectorConfiguration configuration, string apiKey);
+}
+
 public enum ConnectorErrorCategory { Transient, Authentication, Permanent, MalformedResponse, Timeout }
 
 public sealed class ConnectorException(ConnectorErrorCategory category, string code, int? httpStatus = null, TimeSpan? retryAfter = null)

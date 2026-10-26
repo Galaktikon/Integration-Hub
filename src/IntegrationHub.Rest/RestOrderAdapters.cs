@@ -15,6 +15,16 @@ public static class RestHttpClientFactory
     }) { Timeout = Timeout.InfiniteTimeSpan };
 }
 
+public sealed class RestOrderConnectorFactory : IOrderConnectorFactory, IDisposable
+{
+    private readonly HttpClient client = RestHttpClientFactory.Create();
+    public IOrderSource CreateSource(ConnectorConfiguration configuration, string apiKey) =>
+        new RestOrderSource(client, configuration, apiKey);
+    public IOrderDestination CreateDestination(ConnectorConfiguration configuration, string apiKey) =>
+        new RestOrderDestination(client, configuration, apiKey);
+    public void Dispose() => client.Dispose();
+}
+
 public sealed class RestOrderSource : IOrderSource
 {
     private readonly RestClient client;
