@@ -50,8 +50,37 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.demo
     image: integration-hub-demo:local
+    environment: &demo_environment
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Demo: Host=postgres;Port=5432;Database=integration_hub;Username=hub;Password=local_only_password
+      Demo__ApiKey: local-demo-key
+      Demo__AdminKey: local-demo-admin-key
+    depends_on:
+      demo-migrate:
+        condition: service_completed_successfully
     ports:
       - "8081:8081"
+
+  demo-migrate:
+    image: integration-hub-demo:local
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.demo
+    command: migrate
+    environment: *demo_environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  demo-seed:
+    image: integration-hub-demo:local
+    command: seed
+    environment: *demo_environment
+    depends_on:
+      demo-migrate:
+        condition: service_completed_successfully
+    profiles: ["seed"]
 
 volumes:
   hub_postgres:
