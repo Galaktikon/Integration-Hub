@@ -27,7 +27,7 @@ public sealed class SyncPipelineTests
         var runId = Guid.NewGuid();
         await using (var first = Factory(connection!, fake))
         {
-            using var client = first.CreateClient();
+            using var client = await first.CreateAdminClientAsync();
             using var scope = first.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HubDbContext>();
             await db.Database.MigrateAsync();
@@ -63,7 +63,7 @@ public sealed class SyncPipelineTests
                 .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.LeaseExpiresAtUtc, DateTimeOffset.UtcNow.AddSeconds(-1)));
 
         await using var restarted = Factory(connection!, fake);
-        using var restartedClient = restarted.CreateClient();
+        using var restartedClient = await restarted.CreateAdminClientAsync();
         JsonElement state = default;
         for (var i = 0; i < 300; i++)
         {
@@ -89,7 +89,7 @@ public sealed class SyncPipelineTests
         Assert.False(string.IsNullOrWhiteSpace(connection));
         var fake = new FakeConnectors();
         await using var factory = Factory(connection!, fake);
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAdminClientAsync();
         using (var scope = factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<HubDbContext>().Database.MigrateAsync();
 
@@ -156,7 +156,7 @@ public sealed class SyncPipelineTests
 
         await factory.DisposeAsync();
         await using var restarted = Factory(connection!, fake);
-        using var restartedClient = restarted.CreateClient();
+        using var restartedClient = await restarted.CreateAdminClientAsync();
         var persisted = await restartedClient.GetFromJsonAsync<JsonElement>($"/api/v1/runs/{runId}");
         Assert.Equal("completed_with_errors", persisted.GetProperty("status").GetString());
         Assert.Equal(125, persisted.GetProperty("counts").GetProperty("fetched").GetInt32());

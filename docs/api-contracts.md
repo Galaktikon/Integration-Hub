@@ -1,10 +1,10 @@
 # API contracts
 
-Status: Phase 0 target contract, updated through Phase 4 on 2026-10-26. Phases 1–4 implement configuration, manual runs, run history, record details and attempts, cancellation, and retry. Schedule, connector test, and administrator authentication remain planned. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
+Status: Phase 0 target contract, updated through Phase 5 on 2026-10-26. Configuration, manual and scheduled runs, run history, record details and attempts, cancellation, retry, schedule controls, connector tests, and administrator sign-in are implemented. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors.
 
 ## Authentication and general behavior
 
-The target contract requires an authenticated administrator for connector, integration, schedule, run, and record routes. Authentication is scheduled for Phase 5; the current hub runs only in `Development` and must not be publicly exposed. The health routes are unauthenticated and contain no secret data. Hosted requests use HTTPS. Connector credentials are accepted only on create/update and are never returned. List responses use `items` and `nextCursor`; the cursor is opaque. Default page size is 25, maximum 100. Invalid cursors return `400 invalid_cursor`.
+Connector, integration, schedule, run, and record routes require `Authorization: Bearer <accessToken>`. `POST /auth/login` accepts an administrator username and password and returns a signed token with an eight-hour expiry. Only the health routes and login are unauthenticated. The local development credentials are documented in the README; hosted credentials must be supplied outside Git. Hosted requests use HTTPS. Connector credentials are accepted only on create/update and are never returned. List responses use `items` and `nextCursor`; the cursor is opaque. Default page size is 25, maximum 100. Invalid cursors return `400 invalid_cursor`.
 
 Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 precondition_failed` on a stale version. Run creation uses the PostgreSQL unique constraint as its final overlap guard. The API does not execute synchronization inline.
 
@@ -12,6 +12,7 @@ Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 p
 
 | Method | Path | Success | Purpose |
 | --- | --- | --- | --- |
+| POST | `/auth/login` | 200 | Authenticate administrator and issue a short-lived bearer token. |
 | GET | `/connectors` | 200 | List safe connector summaries. |
 | POST | `/connectors` | 201 | Create a supported REST connector. |
 | GET | `/connectors/{id}` | 200 | Read non-secret configuration. |
@@ -36,8 +37,11 @@ Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 p
 | POST | `/runs/{runId}/cancel` | 202 | Request cancellation of queued or running work. |
 | GET | `/health/live` | 200 | Process liveness. |
 | GET | `/health/ready` | 200 or 503 | Database and schema readiness. |
+| POST | `/demo/faults` | 202 | Development-only, administrator-protected source 503 injection (1–10 responses) for the dashboard demo. |
 
 `POST /runs/{runId}/cancel` is a request: in-flight destination writes may finish, and committed results are retained. A queued run may transition directly to `cancelled` in the request transaction. A running run sets `cancellation_requested_at_utc`, records a `cancellation_requested` event, and becomes `cancelled` when the worker observes it.
+
+The connector test sends a bounded authenticated `GET {baseUrl}/capabilities` and checks the connector role and schema version without writing an order. Its response is `{ "healthy": true, "code": "ok" }` or a safe failure code. Schedule `PUT` requires `If-Match` on an existing schedule; creating one does not. Schedule `DELETE` disables the schedule and preserves occurrence history.
 
 ## Connector contract
 

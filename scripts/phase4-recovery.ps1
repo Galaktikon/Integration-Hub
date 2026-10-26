@@ -2,6 +2,8 @@ param(
     [string]$HubUrl = 'http://localhost:8080',
     [string]$SimulatorUrl = 'http://localhost:8081',
     [string]$AdminKey = 'local-demo-admin-key',
+    [string]$AdminUsername = 'admin',
+    [string]$AdminPassword = 'local-demo-password',
     [int]$WaitSeconds = 180
 )
 
@@ -9,7 +11,9 @@ $ErrorActionPreference = 'Stop'
 $HubUrl = $HubUrl.TrimEnd('/')
 $SimulatorUrl = $SimulatorUrl.TrimEnd('/')
 $adminHeaders = @{ 'X-Api-Key' = $AdminKey }
-$connectors = (Invoke-RestMethod "$HubUrl/api/v1/connectors?pageSize=100").items
+$login = Invoke-RestMethod "$HubUrl/api/v1/auth/login" -Method Post -ContentType 'application/json' -Body (@{ username = $AdminUsername; password = $AdminPassword } | ConvertTo-Json)
+$hubHeaders = @{ Authorization = "Bearer $($login.accessToken)" }
+$connectors = (Invoke-RestMethod "$HubUrl/api/v1/connectors?pageSize=100" -Headers $hubHeaders).items
 $source = $connectors | Where-Object { $_.name -eq 'Demo Commerce' -and $_.role -eq 'source' } | Select-Object -First 1
 $destination = $connectors | Where-Object { $_.name -eq 'Demo ERP' -and $_.role -eq 'destination' } | Select-Object -First 1
 if (-not $source -or -not $destination) {
@@ -34,11 +38,11 @@ $body = @{
     validation = @{ schemaVersion = 1; amountMinimum = 0 }
     retryPolicy = @{ maxAttempts = 4; baseDelaySeconds = 2; maxDelaySeconds = 10; maxRecoveries = 2 }
 } | ConvertTo-Json -Depth 8
-$integration = Invoke-RestMethod "$HubUrl/api/v1/integrations" -Method Post -ContentType 'application/json' -Body $body
+$integration = Invoke-RestMethod "$HubUrl/api/v1/integrations" -Method Post -Headers $hubHeaders -ContentType 'application/json' -Body $body
 $before = (Invoke-RestMethod "$SimulatorUrl/__admin/orders/count" -Headers $adminHeaders).count
 $fault = @{ target = 'destination'; mode = 'lostResponse'; remaining = 1; delayMilliseconds = 30000 } | ConvertTo-Json
 Invoke-RestMethod "$SimulatorUrl/__admin/faults" -Method Post -Headers $adminHeaders -ContentType 'application/json' -Body $fault | Out-Null
-$queued = Invoke-RestMethod "$HubUrl/api/v1/integrations/$($integration.id)/runs" -Method Post
+$queued = Invoke-RestMethod "$HubUrl/api/v1/integrations/$($integration.id)/runs" -Method Post -Headers $hubHeaders
 Write-Host "Queued $($queued.runId); waiting for a committed ERP write before restarting the hub."
 
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
@@ -58,7 +62,7 @@ try {
 $run = $null
 do {
     Start-Sleep -Seconds 1
-    try { $run = Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)" } catch { continue }
+    try { $run = Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)" -Headers $hubHeaders } catch { continue }
 } while (($null -eq $run -or $run.status -in @('queued', 'running')) -and (Get-Date) -lt $deadline)
 if ($null -eq $run -or $run.status -in @('queued', 'running')) { throw 'The run did not finish before the wait deadline.' }
 $after = (Invoke-RestMethod "$SimulatorUrl/__admin/orders/count" -Headers $adminHeaders).count
@@ -67,13 +71,13 @@ $cursor = $null
 do {
     $url = "$HubUrl/api/v1/runs/$($queued.runId)/records?pageSize=100"
     if ($cursor) { $url += "&cursor=$([uri]::EscapeDataString($cursor))" }
-    $page = Invoke-RestMethod $url
+    $page = Invoke-RestMethod $url -Headers $hubHeaders
     $records += $page.items
     $cursor = $page.nextCursor
 } while ($cursor)
 $replayed = @($records | Where-Object { $_.attemptCount -gt 1 })
 if ($replayed.Count -ne 1) { throw "Expected one replayed record; found $($replayed.Count)." }
-$attempts = (Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)/records/$($replayed[0].recordId)/attempts").items
+$attempts = (Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)/records/$($replayed[0].recordId)/attempts" -Headers $hubHeaders).items
 if ('uncertain' -notin @($attempts | ForEach-Object { $_.outcome })) { throw 'The interrupted attempt was not marked uncertain.' }
 if ($run.status -ne 'completed' -or $run.counts.fetched -ne 125 -or $run.counts.pending -ne 0) {
     throw "Unexpected run result: $($run | ConvertTo-Json -Depth 5)"
