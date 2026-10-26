@@ -1,6 +1,6 @@
 # API contracts
 
-Status: Phase 0 target contract, updated through Phase 5 on 2026-10-26. Configuration, manual and scheduled runs, run history, record details and attempts, cancellation, retry, schedule controls, connector tests, and administrator sign-in are implemented. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors.
+Status: Phase 0 target contract, updated through Phase 6 on 2026-10-26. Configuration, manual and scheduled runs, run history, record details and attempts, cancellation, retry, schedule controls, connector tests, and administrator sign-in are implemented. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. Responses include `X-Correlation-ID`; callers may supply an ASCII alphanumeric ID of at most 64 characters, with `-`, `_`, and `.` also accepted. Otherwise the API generates one.
 
 ## Authentication and general behavior
 
@@ -37,7 +37,8 @@ Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 p
 | POST | `/runs/{runId}/cancel` | 202 | Request cancellation of queued or running work. |
 | GET | `/health/live` | 200 | Process liveness. |
 | GET | `/health/ready` | 200 or 503 | Database and schema readiness. |
-| POST | `/demo/faults` | 202 | Development-only, administrator-protected source 503 injection (1–10 responses) for the dashboard demo. |
+| GET | `/metrics` | 200 | Administrator-only aggregate run statuses, retry-event count, uncertain-attempt count, and observation time. |
+| POST | `/demo/faults` | 202 | Administrator-protected source 503 injection (1–10 responses) for the dashboard demo. Available in Development or when the hosted `Demo:EnableFaultProxy` setting is enabled. |
 
 `POST /runs/{runId}/cancel` is a request: in-flight destination writes may finish, and committed results are retained. A queued run may transition directly to `cancelled` in the request transaction. A running run sets `cancellation_requested_at_utc`, records a `cancellation_requested` event, and becomes `cancelled` when the worker observes it.
 

@@ -111,6 +111,15 @@ admin.MapPost("/faults", (FaultRequest request, Faults faults) =>
 admin.MapDelete("/faults", (Faults faults) => { faults.Clear(); return Results.NoContent(); });
 admin.MapPost("/seed", async (DemoDbContext db, CancellationToken ct) =>
 { await SeedAsync(db, ct); return Results.Ok(new { sourceOrders = 125 }); });
+admin.MapPost("/reset", async (HttpContext http, DemoDbContext db, Faults faults, CancellationToken ct) =>
+{
+    if (http.Request.Headers["X-Confirm-Reset"].ToString() != "reset-synthetic-demo")
+        return Results.BadRequest(new { code = "reset_confirmation_required" });
+    var removed = await db.DestinationOrders.ExecuteDeleteAsync(ct);
+    faults.Clear();
+    await SeedAsync(db, ct);
+    return Results.Ok(new { destinationOrdersRemoved = removed, sourceOrders = 125 });
+});
 admin.MapGet("/orders/count", async (DemoDbContext db, CancellationToken ct) =>
     Results.Ok(new { count = await db.DestinationOrders.CountAsync(ct) }));
 app.Run();
