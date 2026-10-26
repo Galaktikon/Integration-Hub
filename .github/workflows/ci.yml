@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: integration_hub
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: local_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hub -d integration_hub"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Hub: Host=localhost;Port=5432;Database=integration_hub;Username=hub;Password=local_only_password
+      INTEGRATION_TEST_DATABASE: Host=localhost;Port=5432;Database=integration_hub;Username=hub;Password=local_only_password
+      Security__EncryptionKey: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      Security__AllowedConnectorHosts: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet restore IntegrationHub.sln
+      - run: dotnet build IntegrationHub.sln --no-restore --configuration Release
+      - run: dotnet run --project src/IntegrationHub.Api --configuration Release --no-build -- migrate
+      - run: dotnet tool run dotnet-ef migrations has-pending-model-changes --project src/IntegrationHub.Infrastructure --startup-project src/IntegrationHub.Infrastructure --no-build --configuration Release
+      - run: dotnet test IntegrationHub.sln --no-build --configuration Release

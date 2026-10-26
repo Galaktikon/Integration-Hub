@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: integration_hub
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: local_only_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - hub_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hub -d integration_hub"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.hub
+    image: integration-hub-api:local
+    command: migrate
+    environment: &hub_environment
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Hub: Host=postgres;Port=5432;Database=integration_hub;Username=hub;Password=local_only_password
+      Security__EncryptionKey: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      Security__AllowedConnectorHosts: demo-systems,localhost
+      Demo__BaseUrl: http://demo-systems:8081
+      Demo__ApiKey: local-demo-key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  hub:
+    image: integration-hub-api:local
+    pull_policy: never
+    environment: *hub_environment
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      demo-systems:
+        condition: service_started
+
+  demo-systems:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.demo
+    image: integration-hub-demo:local
+    ports:
+      - "8081:8081"
+
+volumes:
+  hub_postgres:
