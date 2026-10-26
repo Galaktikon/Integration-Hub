@@ -1,6 +1,6 @@
 # Architecture
 
-Implementation note (Phase 5): the combined process queues manual and scheduled runs, checkpoints pages, stores outcomes and attempts, schedules retries, supports cancellation and recovery, and fences stale worker writes. The React dashboard uses the authenticated API and polls live run state.
+Implementation note (Phase 6): the combined process queues manual and scheduled runs, checkpoints pages, stores outcomes and attempts, schedules retries, supports cancellation and recovery, and fences stale worker writes. The React dashboard uses the authenticated API and polls live run state. The Render Blueprint preserves this combined process choice; see the [deployment runbook](phase6-deployment.md) for release order, secrets, and limitations.
 
 Status: Phase 0 baseline, 2026-10-26. See [ADR 0001](adr/0001-modular-monolith.md) for the process decision.
 

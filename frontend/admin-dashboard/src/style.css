@@ -29,6 +29,7 @@
 .attention-item strong{font-size:14px}.attention-item p{font-size:12px;color:#667b90;margin:5px 0 0}
 .attention-icon{width:28px;height:28px;border-radius:50%;background:#c44f39;color:#fff;font-weight:800;display:grid;place-items:center;flex:none}
 .attention-item .ghost{white-space:nowrap}
+.attention-toggle{margin:7px 0 15px}
 .table-tools{display:flex;gap:12px;align-items:end;margin:0 0 17px;flex-wrap:wrap}
 .table-tools label{display:grid;gap:6px;color:#536b7f;font-size:11px;font-weight:700}
 .table-tools input,.table-tools select{border:1px solid #cedbe5;background:#fff;border-radius:7px;padding:10px 12px;color:#20364c;min-height:41px}

@@ -30,13 +30,21 @@ public sealed class ConfigurationApiTests
             builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
         });
         using var anonymous = factory.CreateClient();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/connectors")).StatusCode);
+        using var correlated = new HttpRequestMessage(HttpMethod.Get, "/api/v1/connectors");
+        correlated.Headers.Add("X-Correlation-ID", "test-request-123");
+        var unauthorized = await anonymous.SendAsync(correlated);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.Equal("test-request-123", unauthorized.Headers.GetValues("X-Correlation-ID").Single());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/metrics")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/v1/connectors", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/v1/auth/login",
             new { username = "admin", password = "wrong-password" })).StatusCode);
         using var client = await factory.CreateAdminClientAsync();
         using (var migrationScope = factory.Services.CreateScope())
             await migrationScope.ServiceProvider.GetRequiredService<HubDbContext>().Database.MigrateAsync();
+        var metrics = await client.GetAsync("/api/v1/metrics");
+        Assert.Equal(HttpStatusCode.OK, metrics.StatusCode);
+        Assert.True((await metrics.Content.ReadFromJsonAsync<JsonElement>()).TryGetProperty("retryEvents", out _));
 
         var request = new ConnectorWriteRequest("Integration test source", "restOrdersV1", "source",
             new ConnectorConfiguration(1, "http://localhost:8081/commerce", "apiKeyHeader", 100, 10),

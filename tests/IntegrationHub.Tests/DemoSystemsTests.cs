@@ -14,6 +14,7 @@ using DemoDbContext = Demo::IntegrationHub.DemoSystems.DemoDbContext;
 
 namespace IntegrationHub.Tests;
 
+[Collection("HubDatabase")]
 public sealed class DemoSystemsTests
 {
     [Fact]
@@ -85,6 +86,15 @@ public sealed class DemoSystemsTests
         using var scope2 = factory.Services.CreateScope();
         Assert.Equal(1, await scope2.ServiceProvider.GetRequiredService<DemoDbContext>().DestinationOrders
             .CountAsync(x => x.IntegrationId == integrationId && x.SourceRecordId == lostSourceId));
+
+        using var unconfirmedReset = new HttpRequestMessage(HttpMethod.Post, "/__admin/reset");
+        unconfirmedReset.Headers.Add("X-Api-Key", "test-admin-key");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(unconfirmedReset)).StatusCode);
+        using var reset = new HttpRequestMessage(HttpMethod.Post, "/__admin/reset");
+        reset.Headers.Add("X-Api-Key", "test-admin-key");
+        reset.Headers.Add("X-Confirm-Reset", "reset-synthetic-demo");
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(reset)).StatusCode);
+        Assert.Equal(0, await scope2.ServiceProvider.GetRequiredService<DemoDbContext>().DestinationOrders.CountAsync());
     }
 
     private static async Task SetFaultAsync(HttpClient client, string target, string mode, int delayMilliseconds = 30000)

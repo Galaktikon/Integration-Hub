@@ -8,7 +8,7 @@ public static class DemoFaultEndpoint
 {
     public static void MapDemoFaultEndpoint(this WebApplication app)
     {
-        if (!app.Environment.IsDevelopment()) return;
+        if (!app.Environment.IsDevelopment() && !app.Configuration.GetValue<bool>("Demo:EnableFaultProxy")) return;
         app.MapPost("/api/v1/demo/faults", async (DemoFaultRequest request, IConfiguration config, CancellationToken ct) =>
         {
             if (request.Target != "source" || request.Mode != "503" || request.Remaining is < 1 or > 10)

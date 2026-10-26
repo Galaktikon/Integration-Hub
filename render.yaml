@@ -1,0 +1,85 @@
+# Phase 6 hosted demo. Set sync:false values in Render before first deploy.
+# Apply Neon migrations with the separate migration role before deploying services.
+services:
+  - type: web
+    name: integration-hub-api
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./deploy/Dockerfile.hub
+    dockerContext: .
+    healthCheckPath: /api/v1/health/ready
+    autoDeployTrigger: 'off'
+    maxShutdownDelaySeconds: 120
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:10000
+      - key: ConnectionStrings__Hub
+        sync: false
+      - key: Security__EncryptionKey
+        generateValue: true
+      - key: Security__AdminTokenKey
+        generateValue: true
+      - key: Security__AdminUsername
+        sync: false
+      - key: Security__AdminPasswordHash
+        sync: false
+      - key: Security__AllowedConnectorHosts
+        sync: false
+      - key: Security__FrontendOrigin
+        sync: false
+      - key: Demo__BaseUrl
+        sync: false
+      - key: Demo__EnableFaultProxy
+        value: 'true'
+      - key: Demo__ApiKey
+        fromService:
+          type: web
+          name: integration-hub-demo
+          envVarKey: Demo__ApiKey
+      - key: Demo__AdminKey
+        fromService:
+          type: web
+          name: integration-hub-demo
+          envVarKey: Demo__AdminKey
+
+  - type: web
+    name: integration-hub-demo
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./deploy/Dockerfile.demo
+    dockerContext: .
+    healthCheckPath: /health/ready
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:10000
+      - key: ConnectionStrings__Demo
+        sync: false
+      - key: Demo__ApiKey
+        generateValue: true
+      - key: Demo__AdminKey
+        generateValue: true
+
+  - type: web
+    name: integration-hub-dashboard
+    runtime: static
+    buildCommand: cd frontend/admin-dashboard && npm ci && npm run build
+    staticPublishPath: frontend/admin-dashboard/dist
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

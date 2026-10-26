@@ -8,7 +8,8 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+if (builder.Environment.IsDevelopment()) builder.Logging.AddConsole();
+else builder.Logging.AddJsonConsole();
 
 var connectionString = builder.Configuration.GetConnectionString("Hub");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -34,7 +35,7 @@ builder.Services.AddCors(options => options.AddPolicy("admin-ui", policy =>
 {
     var origin = builder.Configuration["Security:FrontendOrigin"];
     if (!string.IsNullOrWhiteSpace(origin)) policy.WithOrigins(origin).AllowAnyHeader().AllowAnyMethod()
-        .WithExposedHeaders("ETag", "Location");
+        .WithExposedHeaders("ETag", "Location", "X-Correlation-ID");
 }));
 
 var app = builder.Build();
@@ -53,6 +54,7 @@ if (args.FirstOrDefault() == "seed-demo")
     return;
 }
 
+app.UseHubObservability();
 app.UseCors("admin-ui");
 app.UseRateLimiter();
 app.UseAdminAuth();
@@ -68,6 +70,7 @@ app.MapConfigurationEndpoints();
 app.MapConnectorTestEndpoint();
 app.MapRunEndpoints();
 app.MapScheduleEndpoints();
+app.MapOperationalMetrics();
 app.MapDemoFaultEndpoint();
 app.Run();
 

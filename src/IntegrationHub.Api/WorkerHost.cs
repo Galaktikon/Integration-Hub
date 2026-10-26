@@ -39,8 +39,16 @@ public sealed class WorkerHost(IServiceScopeFactory scopes, ILogger<WorkerHost> 
                         activeRunId = run.Id;
                         activeGeneration = run.LeaseGeneration;
                         logger.LogInformation("Claimed run {RunId} generation {Generation}", run.Id, run.LeaseGeneration);
+                        HubTelemetry.RunClaims.Add(1);
                         await scope.ServiceProvider.GetRequiredService<SyncProcessor>()
                             .ProcessAsync(run.Id, owner, run.LeaseGeneration, stoppingToken);
+                        await db.Entry(run).ReloadAsync(stoppingToken);
+                        if (run.FinishedAtUtc is { } finished && run.StartedAtUtc is { } started)
+                        {
+                            var tags = new System.Diagnostics.TagList { { "status", run.Status } };
+                            HubTelemetry.RunFinished.Add(1, tags);
+                            HubTelemetry.RunDuration.Record((finished - started).TotalSeconds, tags);
+                        }
                         activeRunId = null;
                         continue;
                     }

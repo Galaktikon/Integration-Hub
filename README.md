@@ -1,6 +1,6 @@
 # Enterprise Integration Hub
 
-A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. Phases 1–5 provide the .NET 10 foundation, PostgreSQL-backed sync and recovery, a database-backed scheduler, administrator authentication, and a React operations dashboard.
+A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. The local demo includes the .NET 10 API and worker, PostgreSQL-backed sync and recovery, a database-backed scheduler, administrator authentication, and a React operations dashboard. Phase 6 adds browser smoke tests, observability, a Render Blueprint, and a hosted-demo runbook. Public deployment is pending Neon and Render account setup and hosted verification.
 
 ## Current architecture
 
@@ -12,10 +12,10 @@ A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orde
 
 Phase 4 added persisted retry times, attempt history, cancellation, explicit recovery, and stale-worker fencing. Phase 5 adds interval schedules, safe connector checks, a browser-based operator workflow, and protected admin routes. The destination uses a stable external identity, so replay after an uncertain response does not create another ERP row.
 
-## Manual setup for local Phases 1–5
+## Local quick start
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) and enable the Linux container engine. Start Docker Desktop and wait until `docker info` succeeds. On Windows, its WSL 2 backend must be enabled during setup.
-2. Clone or open this repository. No Neon or Render account is needed for Phase 5. Docker Compose builds the application and dashboard inside images, so a host .NET or Node.js installation is optional for this path.
+2. Clone or open this repository. No Neon or Render account is needed for the local demo. Docker Compose builds the application and dashboard inside images, so a host .NET or Node.js installation is optional for this path.
 3. From the repository root, run:
 
    ```powershell
@@ -37,7 +37,7 @@ Phase 4 added persisted retry times, attempt history, cancellation, explicit rec
    ```
 
    Both seed commands are safe to repeat.
-5. Open [http://localhost:5173](http://localhost:5173) and sign in with username `admin` and password `local-demo-password`. These credentials are confined to the local development configuration. In **Connectors**, confirm that `Demo Commerce` and `Demo ERP` have secrets configured, and use **Test** to check each endpoint. In **Integrations**, create an enabled Commerce-to-ERP flow using those connectors; the default four field mappings are valid. Select the flow and click **Run now**. **Runs** polls real execution state and lets you inspect records and attempt history. Use **One 503** before a run to see automatic retry. For manual recovery, use **Outage for retry demo**, start a run, wait for it to fail after four source attempts, then click **Retry run**; the original run and snapshot continue. The **Interval schedule** control can enable a five-minute or longer schedule; disable it after a demo if you do not want recurring local runs.
+5. Open [http://localhost:5173](http://localhost:5173) and sign in with username `admin` and password `local-demo-password`. These credentials are confined to the local development configuration. In **Connectors**, confirm that `Demo Commerce` and `Demo ERP` have secrets configured, and use **Test** to check each endpoint. Create an enabled Commerce-to-ERP flow using the guided integration editor; the default four field mappings are valid. Select the flow and click **Run now**. **Run history** polls real execution state and lets you inspect records and attempt history. Use **One 503** before a run to see automatic retry. For manual recovery, use **Outage for retry demo**, start a run, wait for it to fail after four source attempts, then click **Retry run**; the original run and snapshot continue. The **Interval schedule** control can enable a five-minute or longer schedule; disable it after a demo if you do not want recurring local runs.
 
 6. For direct API calls, sign in first and send the returned token:
 
@@ -129,9 +129,13 @@ dotnet tool run dotnet-ef migrations has-pending-model-changes --project src/Int
 
 CI migrates a fresh PostgreSQL database, checks for model drift, builds, and tests. Do not run `EnsureCreated` or edit database tables by hand.
 
-## Hosted setup later
+## Hosted deployment
 
-No hosted services need to be created for Phases 1–5. Before Phase 6 deployment you will need a Neon project and a paid, always-on Render web service for the combined API, worker, and scheduler, plus a Render static site and simulator service. Configure separate migration and runtime database roles, stable encryption and token keys, a PBKDF2 administrator password hash, approved connector hosts, HTTPS frontend origin, and protected simulator credentials before public access. Run `.\scripts\new-admin-credentials.ps1` in PowerShell to generate the password hash and a fresh signing key, then store its output as private Render environment variables. Set `Security__AdminUsername` separately. The development credentials in this repository must never be used for hosted deployment.
+The [Phase 6 deployment runbook](docs/phase6-deployment.md) gives the ordered Neon and Render setup, migration and role grants, secret configuration, synthetic seed/reset, hosted smoke tests, and recovery demonstration. The public demo URL will be added only after deployment and verification. The development credentials in this repository must never be used for hosted deployment.
+
+## Visual walkthrough
+
+The local synthetic demo screenshots show the [operations overview](docs/screenshots/operations.png), [guided field mapping](docs/screenshots/integration-setup.png), and [run details](docs/screenshots/run-details.png). To refresh them after running and seeding the local stack, set `E2E_ADMIN_PASSWORD` and run `npm run capture:screenshots` from `frontend/admin-dashboard`.
 
 ## Design documents
 
@@ -140,3 +144,5 @@ No hosted services need to be created for Phases 1–5. Before Phase 6 deploymen
 - [Data model](docs/data-model.md)
 - [API contracts](docs/api-contracts.md)
 - [ADR 0001](docs/adr/0001-modular-monolith.md)
+- [Phase 6 deployment and demo runbook](docs/phase6-deployment.md)
+- [Five-minute synthetic demo](docs/demo-guide.md)

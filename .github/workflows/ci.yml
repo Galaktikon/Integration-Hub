@@ -42,4 +42,41 @@ jobs:
       - run: dotnet run --project src/IntegrationHub.DemoSystems --configuration Release --no-build -- migrate
       - run: dotnet tool run dotnet-ef migrations has-pending-model-changes --project src/IntegrationHub.Infrastructure --startup-project src/IntegrationHub.Infrastructure --no-build --configuration Release
       - run: dotnet tool run dotnet-ef migrations has-pending-model-changes --project src/IntegrationHub.DemoSystems --startup-project src/IntegrationHub.DemoSystems --no-build --configuration Release
-      - run: dotnet test IntegrationHub.sln --no-build --configuration Release
+      - run: dotnet test tests/IntegrationHub.Tests/IntegrationHub.Tests.csproj --no-build --configuration Release
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/admin-dashboard/package-lock.json
+      - run: npm ci
+        working-directory: frontend/admin-dashboard
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend/admin-dashboard
+      - run: docker compose up --build -d
+      - name: Wait for local services
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/v1/health/ready && curl -fsS http://localhost:8081/health/ready && curl -fsS http://localhost:5173/; then exit 0; fi
+            sleep 3
+          done
+          docker compose ps
+          exit 1
+      - run: docker compose run --no-deps --rm hub seed-demo
+      - run: docker compose --profile seed run --rm demo-seed
+      - run: npm run test:e2e
+        working-directory: frontend/admin-dashboard
+        env:
+          E2E_ADMIN_PASSWORD: local-demo-password
+          E2E_MUTATE: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failures
+          path: frontend/admin-dashboard/test-results/
+      - run: docker compose down
+        if: always()
