@@ -112,8 +112,11 @@ public static class ConfigurationRules
                 if (field?.Transform is not (null or "trim" or "decimal" or "utcDate"))
                     issues.Add(new($"mapping.fields[{i}].transform", "unsupported_transform", "Transform is not supported."));
             }
-            if (!destinations.Contains("externalOrderId") || !destinations.Contains("amount"))
-                issues.Add(new("mapping.fields", "missing_required_destination", "Map externalOrderId and amount."));
+            if (!new[] { "externalOrderId", "customerEmail", "amount", "placedAtUtc" }.All(destinations.Contains))
+                issues.Add(new("mapping.fields", "missing_required_destination", "Map externalOrderId, customerEmail, amount, and placedAtUtc."));
+            foreach (var field in request.Mapping.Fields)
+                if (field is not null && field.Destination is not ("externalOrderId" or "customerEmail" or "amount" or "placedAtUtc"))
+                    issues.Add(new("mapping.fields", "unsupported_destination", "Only the four order destination fields are supported."));
         }
 
         if (request.Validation is null || request.Validation.SchemaVersion != 1 || request.Validation.AmountMinimum < 0)

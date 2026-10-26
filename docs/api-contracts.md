@@ -1,6 +1,6 @@
 # API contracts
 
-Status: Phase 0 contract, 2026-10-26. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
+Status: Phase 0 target contract, 2026-10-26. Phases 1–3 implement configuration, manual run creation, run history, record details, and attempts. Schedule, connector test, cancellation, and retry routes remain planned. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
 
 ## Authentication and general behavior
 
@@ -172,4 +172,4 @@ Error `detail` and record `safeErrorMessage` never include secrets, connection s
 
 ## Demo systems HTTP contract
 
-The independent simulator exposes `GET /commerce/orders?cursor=...&pageSize=...&snapshot=...` returning `items`, `snapshot`, and `nextCursor`; and `PUT /erp/orders/{integrationId}/{sourceRecordId}` with a stable `Idempotency-Key` and canonical order JSON. It returns `201 created`, `200 updated`, or `200 unchanged` with a destination order ID and outcome field. The same identity cannot create a second ERP row. Fault injection and source seeding are administrator-only demo routes and will be specified in the simulator OpenAPI document during Phase 2.
+The independent simulator exposes `GET /commerce/orders?cursor=...&pageSize=...&snapshot=...` returning `items`, `snapshot`, and `nextCursor`; and `PUT /erp/orders/{integrationId}/{sourceRecordId}` with a stable `Idempotency-Key` and canonical order JSON. It returns `201 created`, `200 updated`, or `200 unchanged` with a destination order ID and outcome field. The same identity cannot create a second ERP row. Fault injection and source seeding are administrator-only demo routes specified in the [Phase 2 simulator contract](simulator-contract.md).

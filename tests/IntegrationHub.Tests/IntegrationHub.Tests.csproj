@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\IntegrationHub.Api\IntegrationHub.Api.csproj" />
+    <ProjectReference Include="..\..\src\IntegrationHub.DemoSystems\IntegrationHub.DemoSystems.csproj" Aliases="Demo" />
+    <ProjectReference Include="..\..\src\IntegrationHub.Rest\IntegrationHub.Rest.csproj" />
   </ItemGroup>
 
 </Project>

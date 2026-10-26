@@ -175,7 +175,7 @@ public static class ConfigurationEndpoints
         return Results.Ok(new { valid = issues.Count == 0, issues });
     }
 
-    private static async Task<List<ValidationIssue>> IntegrationIssues(
+    internal static async Task<List<ValidationIssue>> IntegrationIssues(
         IntegrationWriteRequest body, HubDbContext db, CancellationToken ct)
     {
         var issues = ConfigurationRules.ValidateIntegration(body).ToList();

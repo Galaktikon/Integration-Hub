@@ -1,5 +1,7 @@
 # Architecture
 
+Implementation note (Phase 3): the combined process now queues and executes manual runs, checkpoints pages, stores record outcomes, and reclaims expired runs. The retry scheduling, cancellation, interval scheduler, and complete fencing of stale worker writes described below are Phase 4 design targets.
+
 Status: Phase 0 baseline, 2026-10-26. See [ADR 0001](adr/0001-modular-monolith.md) for the process decision.
 
 ## Components and trust boundaries

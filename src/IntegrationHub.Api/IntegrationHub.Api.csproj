@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\IntegrationHub.Application\IntegrationHub.Application.csproj" />
     <ProjectReference Include="..\IntegrationHub.Infrastructure\IntegrationHub.Infrastructure.csproj" />
+    <ProjectReference Include="..\IntegrationHub.Rest\IntegrationHub.Rest.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
