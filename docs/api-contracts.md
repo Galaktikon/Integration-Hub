@@ -16,11 +16,13 @@ Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 p
 | POST | `/connectors` | 201 | Create a supported REST connector. |
 | GET | `/connectors/{id}` | 200 | Read non-secret configuration. |
 | PUT | `/connectors/{id}` | 200 | Replace configuration or rotate a secret. |
+| DELETE | `/connectors/{id}` | 204 | Delete a connector not used by any integration. Requires `If-Match`. |
 | POST | `/connectors/{id}/test` | 200 | Validate approved endpoint and authentication with a bounded request. |
 | GET | `/integrations` | 200 | List integrations. |
 | POST | `/integrations` | 201 | Create a draft integration. |
 | GET | `/integrations/{id}` | 200 | Read integration details. |
 | PUT | `/integrations/{id}` | 200 | Replace editable configuration. |
+| DELETE | `/integrations/{id}` | 204 | Delete an integration without run history. Requires `If-Match`. |
 | POST | `/integrations/{id}/validate` | 200 | Validate connector capabilities, mapping, and policy. |
 | GET | `/integrations/{id}/schedule` | 200 | Read its schedule; 404 if absent. |
 | PUT | `/integrations/{id}/schedule` | 200 | Create or replace an interval schedule. |
@@ -162,6 +164,7 @@ Use RFC 9457 Problem Details with a stable extension `code`, a `traceId`, and `e
 | 404 | `not_found` | Resource does not exist or is not visible. |
 | 409 | `active_run_exists`, `integration_disabled`, `run_not_retryable` | State conflicts with action. |
 | 412 | `precondition_failed` | `If-Match` version is stale. |
+| 428 | `precondition_required` | `If-Match` is missing on an update or delete. |
 | 422 | `invalid_configuration` | Supported request shape violates configuration rules. |
 | 503 | `dependency_unavailable` | Required storage or downstream dependency is unavailable. |
 
