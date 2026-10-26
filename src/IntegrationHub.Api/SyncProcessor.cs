@@ -343,6 +343,7 @@ public sealed class SyncProcessor(HubDbContext db, SecretProtector secrets,
     private void SetTerminal(SyncRun run, string status)
     {
         run.Status = status;
+        run.NextSourceAttemptAtUtc = null;
         run.FinishedAtUtc = DateTimeOffset.UtcNow;
         run.LeaseOwner = null;
         run.LeaseExpiresAtUtc = null;

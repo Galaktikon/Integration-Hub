@@ -21,14 +21,14 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { HoldSource = true };
         await using var first = Factory(fake);
-        using var firstClient = first.CreateClient();
+        using var firstClient = await first.CreateAdminClientAsync();
         await MigrateAsync(first);
         var integrationId = await CreateIntegrationAsync(firstClient, new RetryPolicy(3, 1, 2, 2));
         var runId = await StartAsync(firstClient, integrationId);
         await fake.SourceEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         await using var second = Factory(fake);
-        using var secondClient = second.CreateClient();
+        using var secondClient = await second.CreateAdminClientAsync();
         await using (var scope = first.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<HubDbContext>();
@@ -63,14 +63,14 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { HoldDestinationAfterCommit = true };
         await using var first = Factory(fake);
-        using var firstClient = first.CreateClient();
+        using var firstClient = await first.CreateAdminClientAsync();
         await MigrateAsync(first);
         var integrationId = await CreateIntegrationAsync(firstClient, new RetryPolicy(3, 1, 2, 2));
         var runId = await StartAsync(firstClient, integrationId);
         await fake.DestinationCommitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         await using var second = Factory(fake);
-        using var secondClient = second.CreateClient();
+        using var secondClient = await second.CreateAdminClientAsync();
         await using (var scope = first.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<HubDbContext>();
@@ -97,7 +97,7 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { LostResponseOnce = true, DestinationUnavailableOnce = true };
         await using var factory = Factory(fake);
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAdminClientAsync();
         await MigrateAsync(factory);
         var integrationId = await CreateIntegrationAsync(client, new RetryPolicy(3, 1, 2, 2));
         var runId = await StartAsync(client, integrationId);
@@ -126,7 +126,7 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { SourceFailuresRemaining = 1 };
         await using var factory = Factory(fake);
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAdminClientAsync();
         await MigrateAsync(factory);
         var integrationId = await CreateIntegrationAsync(client, new RetryPolicy(1, 1, 2, 2));
         var runId = await StartAsync(client, integrationId);
@@ -149,7 +149,7 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { SourceFailuresRemaining = 1 };
         await using var factory = Factory(fake);
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAdminClientAsync();
         await MigrateAsync(factory);
         var integrationId = await CreateIntegrationAsync(client, new RetryPolicy(3, 1, 2, 2));
         var runId = await StartAsync(client, integrationId);
@@ -166,7 +166,7 @@ public sealed class ReliabilityTests
     {
         var fake = new ScriptedConnectors { HoldSource = true };
         await using var factory = Factory(fake);
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAdminClientAsync();
         await MigrateAsync(factory);
         var integrationId = await CreateIntegrationAsync(client, new RetryPolicy(3, 1, 2, 2));
         var responses = await Task.WhenAll(

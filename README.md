@@ -1,21 +1,21 @@
 # Enterprise Integration Hub
 
-A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. Phases 1–4 provide the .NET 10 foundation, hub configuration API, a separate PostgreSQL-backed Commerce/ERP simulator, HTTP adapters, durable synchronization, and recovery controls. Scheduling and the React UI arrive in later phases.
+A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. Phases 1–5 provide the .NET 10 foundation, PostgreSQL-backed sync and recovery, a database-backed scheduler, administrator authentication, and a React operations dashboard.
 
 ## Current architecture
 
-- One ASP.NET Core process hosts the API and a background worker. The worker claims queued runs, checkpoints source pages, persists record outcomes, schedules bounded retries, and reclaims interrupted runs after lease expiry or a graceful restart.
+- One ASP.NET Core process hosts the API, sync worker, and scheduler. The scheduler atomically handles due occurrences across competing processes; the sync worker checkpoints pages, schedules bounded retries, and reclaims interrupted runs.
 - EF Core stores hub configuration and execution state in PostgreSQL. Local Compose uses PostgreSQL 17; the hosted demo will use Neon.
 - Connector API keys are encrypted with AES-256-GCM using an environment-supplied key. API responses only report `secretSet`.
 - The demo systems own a separate `demo` schema and expose paginated Commerce orders, idempotent ERP writes, and administrator-only fault controls. The worker accesses them through HTTP adapters.
-- Authentication arrives in Phase 5. The API refuses to start outside `Development`; do not expose this environment publicly.
+- Admin sign-in issues an eight-hour signed bearer token. The dashboard keeps it in memory. Non-development hosting requires an administrator password hash and a separate signing key; the local example credentials are for development only.
 
-Phase 4 adds persisted source and record retry times, attempt history, cancellation, explicit recovery of eligible failed runs, and database fencing that rejects stale worker writes. The destination uses a stable external identity, so replay after an uncertain response does not create another ERP row. Interval scheduling and the operations UI are Phase 5 work.
+Phase 4 added persisted retry times, attempt history, cancellation, explicit recovery, and stale-worker fencing. Phase 5 adds interval schedules, safe connector checks, a browser-based operator workflow, and protected admin routes. The destination uses a stable external identity, so replay after an uncertain response does not create another ERP row.
 
-## Manual setup for local Phases 1–4
+## Manual setup for local Phases 1–5
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) and enable the Linux container engine. Start Docker Desktop and wait until `docker info` succeeds. On Windows, its WSL 2 backend must be enabled during setup.
-2. Clone or open this repository. No Neon or Render account is needed for Phase 4. Docker Compose builds the application inside an image, so a host .NET SDK is optional for this path.
+2. Clone or open this repository. No Neon or Render account is needed for Phase 5. Docker Compose builds the application and dashboard inside images, so a host .NET or Node.js installation is optional for this path.
 3. From the repository root, run:
 
    ```powershell
@@ -23,7 +23,7 @@ Phase 4 adds persisted source and record retry times, attempt history, cancellat
    docker compose ps
    ```
 
-   Compose starts PostgreSQL, applies the hub and simulator migrations, then starts both services. The first image build downloads .NET and NuGet dependencies. Check `http://localhost:8080/api/v1/health/ready` and `http://localhost:8081/health/ready` for `{"status":"ready"}`.
+   Compose starts PostgreSQL, applies the hub and simulator migrations, then starts the API, simulator, and dashboard. The first image build downloads .NET, NuGet, and npm dependencies. Check `http://localhost:8080/api/v1/health/ready` and `http://localhost:8081/health/ready` for `{"status":"ready"}`.
 4. Seed two synthetic connector configurations:
 
    ```powershell
@@ -37,14 +37,18 @@ Phase 4 adds persisted source and record retry times, attempt history, cancellat
    ```
 
    Both seed commands are safe to repeat.
-5. List the seeded connectors:
+5. Open [http://localhost:5173](http://localhost:5173) and sign in with username `admin` and password `local-demo-password`. These credentials are confined to the local development configuration. In **Connectors**, confirm that `Demo Commerce` and `Demo ERP` have secrets configured, and use **Test** to check each endpoint. In **Integrations**, create an enabled Commerce-to-ERP flow using those connectors; the default four field mappings are valid. Select the flow and click **Run now**. **Runs** polls real execution state and lets you inspect records and attempt history. Use **One 503** before a run to see automatic retry. For manual recovery, use **Outage for retry demo**, start a run, wait for it to fail after four source attempts, then click **Retry run**; the original run and snapshot continue. The **Interval schedule** control can enable a five-minute or longer schedule; disable it after a demo if you do not want recurring local runs.
+
+6. For direct API calls, sign in first and send the returned token:
 
    ```powershell
-   Invoke-RestMethod http://localhost:8080/api/v1/connectors
+   $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body '{"username":"admin","password":"local-demo-password"}'
+   $hubHeaders = @{ Authorization = "Bearer $($login.accessToken)" }
+   Invoke-RestMethod http://localhost:8080/api/v1/connectors -Headers $hubHeaders
    ```
 
-   Responses include IDs and `secretSet: true`, never the API key. The generated OpenAPI JSON is at `http://localhost:8080/openapi/v1.json`.
-6. Try the source and a transient fault:
+   Responses include IDs and `secretSet: true`, never the API key. Send `$hubHeaders` on other hub API requests, including the generated OpenAPI JSON at `http://localhost:8080/openapi/v1.json`.
+7. Try the source and a transient fault directly on the simulator:
 
    ```powershell
    $sourceHeaders = @{ 'X-Api-Key' = 'local-demo-key' }
@@ -56,7 +60,7 @@ Phase 4 adds persisted source and record retry times, attempt history, cancellat
    ```
 
    The next source request returns 503; the following one succeeds. See [simulator contract](docs/simulator-contract.md) for destination writes and other faults.
-7. Run the complete sync from PowerShell:
+8. Run the complete sync from PowerShell:
 
    ```powershell
    .\scripts\phase3-demo.ps1 -InjectMalformedRecord
@@ -68,13 +72,13 @@ Phase 4 adds persisted source and record retry times, attempt history, cancellat
    To inspect records and attempts directly, use the run ID printed by the script:
 
    ```powershell
-   Invoke-RestMethod "http://localhost:8080/api/v1/runs/$runId/records?status=failed_permanent"
-   Invoke-RestMethod "http://localhost:8080/api/v1/integrations/$integrationId/runs"
+   Invoke-RestMethod "http://localhost:8080/api/v1/runs/$runId/records?status=failed_permanent" -Headers $hubHeaders
+   Invoke-RestMethod "http://localhost:8080/api/v1/integrations/$integrationId/runs" -Headers $hubHeaders
    ```
 
    Set `$runId` and `$integrationId` to the values in the script output. Run and record lists accept `pageSize` (1–100) and an opaque `cursor` returned as `nextCursor`.
 
-8. Reproduce the Phase 4 lost-response and restart recovery demonstration:
+9. Reproduce the Phase 4 lost-response and restart recovery demonstration:
 
    ```powershell
    .\scripts\phase4-recovery.ps1
@@ -82,11 +86,11 @@ Phase 4 adds persisted source and record retry times, attempt history, cancellat
 
    This script creates a fresh integration, injects one destination response loss after the ERP write commits, restarts the hub while the request is pending, then verifies a completed 125-record run. It checks that exactly 125 ERP rows were added and that the interrupted attempt was marked `uncertain`. Run it from a terminal with access to Docker Desktop. It uses the seeded demo connectors and orders from step 4.
 
-   To exercise automatic source retry separately, inject one source `503` immediately before submitting a run with `.\scripts\phase3-demo.ps1`. The worker persists `nextSourceAttemptAtUtc`, releases the lease until the due time, and resumes without operator input. A failed run with `allowedActions` containing `retry` can be requeued with `Invoke-RestMethod "http://localhost:8080/api/v1/runs/$runId/retry" -Method Post`. To request cancellation of a queued or running run, use the corresponding `/cancel` route. `GET /api/v1/runs/{runId}` shows status, counters, last error category, retry time, and allowed actions; record and attempt routes show individual outcomes. A running cancellation takes effect after the current external call returns or is cancelled.
+   To exercise automatic source retry separately, inject one source `503` immediately before submitting a run with `.\scripts\phase3-demo.ps1`, or use the browser's **One 503** action. The worker persists `nextSourceAttemptAtUtc`, releases the lease until the due time, and resumes without operator input. A failed run with `allowedActions` containing `retry` can be requeued in the dashboard or with `Invoke-RestMethod "http://localhost:8080/api/v1/runs/$runId/retry" -Method Post -Headers $hubHeaders`. A running cancellation takes effect after the current external call returns or is cancelled.
 
    The worker enforces a one-hour execution deadline, 1,000 pages, 50,000 records, 64 KiB per source item, and 2 MiB per source page. Connector timeouts and configured attempt budgets further bound external work.
 
-If port 5432, 8080, or 8081 is already in use, change only the left side of the matching `ports` entry in `compose.yaml`. If you change port 8080, use the new host port in browser and PowerShell requests. Container-to-container addresses stay unchanged. To stop the stack, run `docker compose down`; omit `-v` to retain local database data.
+If port 5432, 5173, 8080, or 8081 is already in use, change only the left side of the matching `ports` entry in `compose.yaml`. If you change port 8080, update the dashboard's `VITE_API_BASE_URL` build argument, the hub's `Security__FrontendOrigin`, and browser and PowerShell URLs. Container-to-container addresses stay unchanged. To stop the stack, run `docker compose down`; omit `-v` to retain local database data.
 
 ## Build and test without running the hub in Docker
 
@@ -101,7 +105,7 @@ $env:INTEGRATION_TEST_DATABASE = 'Host=localhost;Port=5432;Database=integration_
 dotnet test IntegrationHub.sln --no-build
 ```
 
-Create `integration_hub_test` only once; `createdb` reports that it already exists on later runs. The integration tests migrate their own schemas and use this separate database so the live Compose worker cannot claim test runs. CI applies both migrations. Clear the environment variable afterward with `Remove-Item Env:INTEGRATION_TEST_DATABASE`. To run only unit tests without PostgreSQL, use `dotnet test --filter 'FullyQualifiedName!~ConfigurationApiTests&FullyQualifiedName!~DemoSystemsTests&FullyQualifiedName!~SyncPipelineTests&FullyQualifiedName!~ReliabilityTests'`.
+Create `integration_hub_test` only once; `createdb` reports that it already exists on later runs. The integration tests migrate their own schemas and use this separate database so the live Compose worker cannot claim test runs. CI applies both migrations. Clear the environment variable afterward with `Remove-Item Env:INTEGRATION_TEST_DATABASE`. To run only unit tests without PostgreSQL, use `dotnet test --filter 'FullyQualifiedName!~ConfigurationApiTests&FullyQualifiedName!~DemoSystemsTests&FullyQualifiedName!~SyncPipelineTests&FullyQualifiedName!~ReliabilityTests&FullyQualifiedName!~ScheduleTests'`. To build the dashboard on the host, run `npm ci` and `npm run build` in `frontend/admin-dashboard`.
 
 To run services directly on Windows, start PostgreSQL with `docker compose up -d postgres`, migrate each project with `dotnet run --project src/IntegrationHub.Api -- migrate` and `dotnet run --project src/IntegrationHub.DemoSystems -- migrate`, seed with `dotnet run --project src/IntegrationHub.DemoSystems -- seed`, then start both projects. Development settings contain only local example credentials. Override them with environment variables for any nonlocal environment.
 
@@ -127,7 +131,7 @@ CI migrates a fresh PostgreSQL database, checks for model drift, builds, and tes
 
 ## Hosted setup later
 
-No hosted services need to be created for Phases 1–4. Before Phase 6 deployment you will need a Neon project and a paid, always-on Render web service for the combined API and worker, plus a Render static site and simulator service. A migration role, runtime database role, stable encryption key, approved connector hosts, HTTPS origin, and administrator authentication must be configured before public access. The current API blocks non-development hosting because authentication is not yet present.
+No hosted services need to be created for Phases 1–5. Before Phase 6 deployment you will need a Neon project and a paid, always-on Render web service for the combined API, worker, and scheduler, plus a Render static site and simulator service. Configure separate migration and runtime database roles, stable encryption and token keys, a PBKDF2 administrator password hash, approved connector hosts, HTTPS frontend origin, and protected simulator credentials before public access. Run `.\scripts\new-admin-credentials.ps1` in PowerShell to generate the password hash and a fresh signing key, then store its output as private Render environment variables. Set `Security__AdminUsername` separately. The development credentials in this repository must never be used for hosted deployment.
 
 ## Design documents
 

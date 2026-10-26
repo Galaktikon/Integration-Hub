@@ -3,13 +3,12 @@ using IntegrationHub.Infrastructure;
 using IntegrationHub.Application;
 using IntegrationHub.Rest;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-
-if (!builder.Environment.IsDevelopment() && args.FirstOrDefault() is not "migrate")
-    throw new InvalidOperationException("Admin authentication arrives in Phase 5. Run this host only in Development until then.");
 
 var connectionString = builder.Configuration.GetConnectionString("Hub");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -20,15 +19,22 @@ builder.Services.AddDbContext<HubDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddSingleton(_ => new SecretProtector(
     builder.Configuration["Security:EncryptionKey"] ?? throw new InvalidOperationException("Security:EncryptionKey is required.")));
 builder.Services.AddHostedService<WorkerHost>();
+builder.Services.AddHostedService<ScheduleWorker>();
 builder.Services.AddScoped<SyncProcessor>();
 builder.Services.AddScoped<RunLease>();
-builder.Services.AddScoped<IOrderConnectorFactory, RestOrderConnectorFactory>();
+builder.Services.AddSingleton<AdminAuth>();
+builder.Services.AddScoped<IOrderConnectorFactory>(_ => new RestOrderConnectorFactory(!builder.Environment.IsDevelopment()));
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
+builder.Services.AddRateLimiter(options => options.AddPolicy("admin-login", context =>
+    RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0, AutoReplenishment = true })));
 builder.Services.AddCors(options => options.AddPolicy("admin-ui", policy =>
 {
     var origin = builder.Configuration["Security:FrontendOrigin"];
-    if (!string.IsNullOrWhiteSpace(origin)) policy.WithOrigins(origin).AllowAnyHeader().AllowAnyMethod();
+    if (!string.IsNullOrWhiteSpace(origin)) policy.WithOrigins(origin).AllowAnyHeader().AllowAnyMethod()
+        .WithExposedHeaders("ETag", "Location");
 }));
 
 var app = builder.Build();
@@ -48,6 +54,8 @@ if (args.FirstOrDefault() == "seed-demo")
 }
 
 app.UseCors("admin-ui");
+app.UseRateLimiter();
+app.UseAdminAuth();
 app.MapOpenApi();
 app.MapGet("/api/v1/health/live", () => Results.Ok(new { status = "live" }));
 app.MapGet("/api/v1/health/ready", async (HubDbContext db, CancellationToken cancellationToken) =>
@@ -57,7 +65,10 @@ app.MapGet("/api/v1/health/ready", async (HubDbContext db, CancellationToken can
         : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 
 app.MapConfigurationEndpoints();
+app.MapConnectorTestEndpoint();
 app.MapRunEndpoints();
+app.MapScheduleEndpoints();
+app.MapDemoFaultEndpoint();
 app.Run();
 
 public partial class Program;

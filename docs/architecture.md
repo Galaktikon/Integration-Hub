@@ -1,6 +1,6 @@
 # Architecture
 
-Implementation note (Phase 4): the combined process queues and executes manual runs, checkpoints pages, stores record outcomes and attempts, schedules retries, supports cancellation and explicit recovery, and fences stale worker writes. The interval scheduler and operations UI remain Phase 5 work.
+Implementation note (Phase 5): the combined process queues manual and scheduled runs, checkpoints pages, stores outcomes and attempts, schedules retries, supports cancellation and recovery, and fences stale worker writes. The React dashboard uses the authenticated API and polls live run state.
 
 Status: Phase 0 baseline, 2026-10-26. See [ADR 0001](adr/0001-modular-monolith.md) for the process decision.
 
@@ -76,7 +76,7 @@ Schedules use UTC intervals with a minimum interval of five minutes. The worker 
 
 Adapters normalize errors as `transient`, `rateLimited`, `permanentData`, `permanentConfiguration`, `authentication`, `concurrencyConflict`, `infrastructure`, or `cancelled`. HTTP status alone does not determine the category. APIs use RFC 9457 Problem Details for request failures and stable error codes for record failures. Logs include run ID, record ID, connector ID, attempt, and trace ID; they exclude secret values and raw payloads. Metrics cover run duration, records, retries, failures, and expired-lease recovery.
 
-Admin write operations and run history will require authentication in Phase 5. Until then the hub starts only in `Development` and must not be publicly exposed. Demo fault injection and reset endpoints require an admin key. Database URLs, encryption keys, and API keys will be Render environment secrets. Use separate low-privilege Neon roles for hub runtime, migrations, and simulator. The hub allows outbound HTTP only to configured demo hosts in the hosted environment.
+Admin routes require a signed bearer token obtained with a password at `/api/v1/auth/login`; the local password is development-only. Hosted configuration requires a PBKDF2 password hash and separate token signing key. The browser keeps its token in memory. Demo fault injection and reset endpoints require an admin key; the development-only hub fault proxy exposes bounded source 503 injection to authenticated dashboard users. Database URLs, encryption keys, and API keys will be Render environment secrets. Use separate low-privilege Neon roles for hub runtime, migrations, and simulator. Connector hostnames are allowlisted, redirects are disabled, and hosted DNS connections reject private and loopback addresses.
 
 ## Planned repository and startup
 
@@ -93,7 +93,7 @@ deploy/                        Docker and Render definitions
 docs/                          specifications and ADRs
 ```
 
-`docker compose up --build` starts PostgreSQL, hub, and simulator; the UI joins later. A dedicated migration command applies schema changes, and development-only seed commands load deterministic synthetic orders. The reset command requires a demo-only guard and never runs automatically at application startup. CI builds, tests, and verifies migrations from an empty database.
+`docker compose up --build` starts PostgreSQL, hub, simulator, and dashboard. A dedicated migration command applies schema changes, and development-only seed commands load deterministic synthetic orders. The reset command requires a demo-only guard and never runs automatically at application startup. CI builds, tests, and verifies migrations from an empty database.
 
 ## Hosting references
 

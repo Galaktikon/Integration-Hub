@@ -29,7 +29,12 @@ public sealed class ConfigurationApiTests
             builder.UseSetting("Security:AllowedConnectorHosts", "localhost");
             builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
         });
-        using var client = factory.CreateClient();
+        using var anonymous = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/connectors")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/v1/connectors", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/v1/auth/login",
+            new { username = "admin", password = "wrong-password" })).StatusCode);
+        using var client = await factory.CreateAdminClientAsync();
         using (var migrationScope = factory.Services.CreateScope())
             await migrationScope.ServiceProvider.GetRequiredService<HubDbContext>().Database.MigrateAsync();
 

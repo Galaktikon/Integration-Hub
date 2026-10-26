@@ -40,6 +40,7 @@ app.MapGet("/health/ready", async (DemoDbContext db, CancellationToken ct) =>
 
 var commerce = app.MapGroup("/commerce").AddEndpointFilter(async (context, next) =>
     Authorized(context.HttpContext, apiKey) ? await next(context) : Results.Unauthorized());
+commerce.MapGet("/capabilities", () => Results.Ok(new { schemaVersion = 1, role = "source", entityType = "orders" }));
 commerce.MapGet("/orders", async (DemoDbContext db, Faults faults, int? pageSize,
     string? cursor, string? snapshot, CancellationToken ct) =>
 {
@@ -60,6 +61,7 @@ commerce.MapGet("/orders", async (DemoDbContext db, Faults faults, int? pageSize
 
 var erp = app.MapGroup("/erp").AddEndpointFilter(async (context, next) =>
     Authorized(context.HttpContext, apiKey) ? await next(context) : Results.Unauthorized());
+erp.MapGet("/capabilities", () => Results.Ok(new { schemaVersion = 1, role = "destination", entityType = "orders" }));
 erp.MapPut("/orders/{integrationId:guid}/{sourceRecordId}", async (HttpContext http, DemoDbContext db,
     Faults faults, Guid integrationId, string sourceRecordId, ErpOrder order, CancellationToken ct) =>
 {

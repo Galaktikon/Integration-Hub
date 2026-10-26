@@ -46,10 +46,7 @@ public static class RunEndpoints
         var destination = await db.Connectors.AsNoTracking().SingleAsync(x => x.Id == integration.DestinationConnectorId, ct);
         if (source.EncryptedSecret is null || destination.EncryptedSecret is null)
             return Error(422, "invalid_configuration", "Both connector API keys are required.");
-        var snapshot = new RunSnapshot(
-            JsonSerializer.Deserialize<ConnectorConfiguration>(source.ConfigurationJson, Json)!, source.EncryptedSecret,
-            JsonSerializer.Deserialize<ConnectorConfiguration>(destination.ConfigurationJson, Json)!, destination.EncryptedSecret,
-            body.Mapping, body.Validation, body.RetryPolicy);
+        var snapshot = Snapshot(integration, source, destination);
         var run = new SyncRun { IntegrationId = id, ConfigSnapshotJson = JsonSerializer.Serialize(snapshot, Json),
             DeadlineAtUtc = DateTimeOffset.UtcNow.AddHours(1) };
         db.SyncRuns.Add(run);
@@ -132,6 +129,13 @@ public static class RunEndpoints
         catch (FormatException) { return false; }
     }
     private static string Cursor(int offset) => Convert.ToBase64String(Encoding.UTF8.GetBytes(offset.ToString()));
+
+    internal static RunSnapshot Snapshot(Integration integration, Connector source, Connector destination) => new(
+        JsonSerializer.Deserialize<ConnectorConfiguration>(source.ConfigurationJson, Json)!, source.EncryptedSecret!,
+        JsonSerializer.Deserialize<ConnectorConfiguration>(destination.ConfigurationJson, Json)!, destination.EncryptedSecret!,
+        JsonSerializer.Deserialize<MappingConfiguration>(integration.MappingJson, Json)!,
+        JsonSerializer.Deserialize<ValidationConfiguration>(integration.ValidationJson, Json)!,
+        JsonSerializer.Deserialize<RetryPolicy>(integration.RetryPolicyJson, Json)!);
 
     private static async Task<IResult> RetryRun(Guid runId, HubDbContext db, CancellationToken ct)
     {

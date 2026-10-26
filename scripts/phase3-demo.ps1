@@ -1,6 +1,8 @@
 param(
     [string]$HubUrl = 'http://localhost:8080',
     [string]$SimulatorUrl = 'http://localhost:8081',
+    [string]$AdminUsername = 'admin',
+    [string]$AdminPassword = 'local-demo-password',
     [switch]$InjectMalformedRecord,
     [int]$WaitSeconds = 120
 )
@@ -8,14 +10,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $HubUrl = $HubUrl.TrimEnd('/')
 $SimulatorUrl = $SimulatorUrl.TrimEnd('/')
-$connectors = (Invoke-RestMethod "$HubUrl/api/v1/connectors?pageSize=100").items
+$login = Invoke-RestMethod "$HubUrl/api/v1/auth/login" -Method Post -ContentType 'application/json' -Body (@{ username = $AdminUsername; password = $AdminPassword } | ConvertTo-Json)
+$hubHeaders = @{ Authorization = "Bearer $($login.accessToken)" }
+$connectors = (Invoke-RestMethod "$HubUrl/api/v1/connectors?pageSize=100" -Headers $hubHeaders).items
 $source = $connectors | Where-Object { $_.name -eq 'Demo Commerce' -and $_.role -eq 'source' } | Select-Object -First 1
 $destination = $connectors | Where-Object { $_.name -eq 'Demo ERP' -and $_.role -eq 'destination' } | Select-Object -First 1
 if (-not $source -or -not $destination) {
     throw 'Demo connectors are missing. Run: docker compose run --no-deps --rm hub seed-demo'
 }
 
-$integrations = (Invoke-RestMethod "$HubUrl/api/v1/integrations?pageSize=100").items
+$integrations = (Invoke-RestMethod "$HubUrl/api/v1/integrations?pageSize=100" -Headers $hubHeaders).items
 $integration = $integrations | Where-Object {
     $_.name -eq 'Commerce Orders to ERP Orders' -and $_.sourceConnectorId -eq $source.id -and
     $_.destinationConnectorId -eq $destination.id -and $_.enabled
@@ -39,7 +43,7 @@ if (-not $integration) {
         validation = @{ schemaVersion = 1; amountMinimum = 0 }
         retryPolicy = @{ maxAttempts = 4; baseDelaySeconds = 2; maxDelaySeconds = 60; maxRecoveries = 2 }
     } | ConvertTo-Json -Depth 8
-    $integration = Invoke-RestMethod "$HubUrl/api/v1/integrations" -Method Post -ContentType 'application/json' -Body $body
+    $integration = Invoke-RestMethod "$HubUrl/api/v1/integrations" -Method Post -Headers $hubHeaders -ContentType 'application/json' -Body $body
 }
 
 if ($InjectMalformedRecord) {
@@ -48,18 +52,18 @@ if ($InjectMalformedRecord) {
     Invoke-RestMethod "$SimulatorUrl/__admin/faults" -Method Post -Headers $headers -ContentType 'application/json' -Body $fault | Out-Null
 }
 
-$queued = Invoke-RestMethod "$HubUrl/api/v1/integrations/$($integration.id)/runs" -Method Post
+$queued = Invoke-RestMethod "$HubUrl/api/v1/integrations/$($integration.id)/runs" -Method Post -Headers $hubHeaders
 Write-Host "Queued run $($queued.runId)"
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
 do {
     Start-Sleep -Seconds 1
-    $run = Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)"
+    $run = Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)" -Headers $hubHeaders
 } while ($run.status -in @('queued', 'running') -and (Get-Date) -lt $deadline)
 
 $run | ConvertTo-Json -Depth 6
 if ($run.status -in @('queued', 'running')) { throw 'The run did not finish before the wait deadline.' }
 if ($run.counts.failedPermanent -gt 0) {
-    Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)/records?status=failed_permanent" |
+    Invoke-RestMethod "$HubUrl/api/v1/runs/$($queued.runId)/records?status=failed_permanent" -Headers $hubHeaders |
         ConvertTo-Json -Depth 6
 }
 if ($run.status -notin @('completed', 'completed_with_errors')) { throw "Run ended as $($run.status)." }

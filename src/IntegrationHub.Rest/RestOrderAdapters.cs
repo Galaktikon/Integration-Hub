@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using IntegrationHub.Application;
 
@@ -7,17 +8,54 @@ namespace IntegrationHub.Rest;
 
 public static class RestHttpClientFactory
 {
-    public static HttpClient Create() => new(new SocketsHttpHandler
+    public static HttpClient Create(bool requirePublicAddresses = false)
     {
-        AllowAutoRedirect = false,
-        MaxConnectionsPerServer = 8,
-        PooledConnectionLifetime = TimeSpan.FromMinutes(5)
-    }) { Timeout = Timeout.InfiniteTimeSpan };
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            MaxConnectionsPerServer = 8,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+        };
+        if (requirePublicAddresses) handler.ConnectCallback = async (context, ct) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, ct);
+            if (addresses.Length == 0 || addresses.Any(x => !IsPublicAddress(x)))
+                throw new HttpRequestException("Connector host resolved to a restricted address.");
+            var socket = new Socket(addresses[0].AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(addresses[0], context.DnsEndPoint.Port), ct);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch { socket.Dispose(); throw; }
+        };
+        return new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    internal static bool IsPublicAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (IPAddress.IsLoopback(address)) return false;
+        var b = address.GetAddressBytes();
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+            return b[0] is not (0 or 10 or 127) && b[0] < 224 &&
+                !(b[0] == 100 && b[1] is >= 64 and <= 127) &&
+                !(b[0] == 169 && b[1] == 254) &&
+                !(b[0] == 172 && b[1] is >= 16 and <= 31) &&
+                !(b[0] == 192 && b[1] == 168) &&
+                !(b[0] == 198 && b[1] is 18 or 19);
+        return address.AddressFamily == AddressFamily.InterNetworkV6 &&
+            !address.IsIPv6LinkLocal && !address.IsIPv6SiteLocal && !address.IsIPv6Multicast &&
+            b[0] is not (0xfc or 0xfd) && !(b[0] == 0xfe && b[1] is >= 0x80 and <= 0xbf) &&
+            !address.Equals(IPAddress.IPv6Any) && !address.Equals(IPAddress.IPv6None);
+    }
 }
 
 public sealed class RestOrderConnectorFactory : IOrderConnectorFactory, IDisposable
 {
-    private readonly HttpClient client = RestHttpClientFactory.Create();
+    private readonly HttpClient client;
+    public RestOrderConnectorFactory(bool requirePublicAddresses = false) =>
+        client = RestHttpClientFactory.Create(requirePublicAddresses);
     public IOrderSource CreateSource(ConnectorConfiguration configuration, string apiKey) =>
         new RestOrderSource(client, configuration, apiKey);
     public IOrderDestination CreateDestination(ConnectorConfiguration configuration, string apiKey) =>
