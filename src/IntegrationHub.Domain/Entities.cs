@@ -89,6 +89,7 @@ public sealed class SyncRun
     public DateTimeOffset? FinishedAtUtc { get; set; }
     public DateTimeOffset? DeadlineAtUtc { get; set; }
     public string? LastErrorCode { get; set; }
+    public string? LastErrorCategory { get; set; }
 }
 
 public sealed class SyncPage

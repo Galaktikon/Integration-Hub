@@ -1,10 +1,10 @@
 # API contracts
 
-Status: Phase 0 target contract, 2026-10-26. Phases 1–3 implement configuration, manual run creation, run history, record details, and attempts. Schedule, connector test, cancellation, and retry routes remain planned. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
+Status: Phase 0 target contract, updated through Phase 4 on 2026-10-26. Phases 1–4 implement configuration, manual runs, run history, record details and attempts, cancellation, and retry. Schedule, connector test, and administrator authentication remain planned. All hub routes begin `/api/v1`, use JSON with `camelCase` names, UUID identifiers, UTC ISO 8601 timestamps, and `application/problem+json` for API errors. The OpenAPI document generated during implementation must follow this specification.
 
 ## Authentication and general behavior
 
-All connector, integration, schedule, run, and record routes require an authenticated administrator. The health routes are unauthenticated and contain no secret data. Hosted requests use HTTPS. Connector credentials are accepted only on create/update and are never returned. List responses use `items` and `nextCursor`; the cursor is opaque. Default page size is 25, maximum 100. Invalid or expired cursors return `400 invalid_cursor`.
+The target contract requires an authenticated administrator for connector, integration, schedule, run, and record routes. Authentication is scheduled for Phase 5; the current hub runs only in `Development` and must not be publicly exposed. The health routes are unauthenticated and contain no secret data. Hosted requests use HTTPS. Connector credentials are accepted only on create/update and are never returned. List responses use `items` and `nextCursor`; the cursor is opaque. Default page size is 25, maximum 100. Invalid cursors return `400 invalid_cursor`.
 
 Mutable resources expose an `ETag`; `PUT` requires `If-Match` and returns `412 precondition_failed` on a stale version. Run creation uses the PostgreSQL unique constraint as its final overlap guard. The API does not execute synchronization inline.
 
@@ -109,6 +109,8 @@ It returns `409 active_run_exists` if the integration already has a queued or ru
 
 `POST /runs/{runId}/retry` has an empty body. It is allowed only for a `failed` run with a retryable last error and remaining recovery budget. It preserves the same run ID, configuration and source snapshot, successful record states, and attempt history; it increments `recoveryGeneration` and changes the run to `queued`. Its `202` response has the same `Location` and includes `runId`, `status`, and `recoveryGeneration`. Concurrent retry requests yield one `202` and one `409 run_not_retryable`. For permanent data errors, the administrator corrects data or mapping and starts a new manual run.
 
+Source and destination transient failures automatically receive bounded retries with persisted due times. `GET /runs/{runId}` exposes `nextSourceAttemptAtUtc`, `lastErrorCode`, and `lastErrorCategory`; record summaries expose `nextAttemptAtUtc`. A failed run exposes `retry` in `allowedActions` only for a transient or timeout error with remaining recovery budget. A retry starts a fresh one-hour execution deadline and attempt budget while retaining the original configuration snapshot.
+
 ## Run response and count semantics
 
 `GET /runs/{runId}` example:
@@ -162,7 +164,7 @@ Use RFC 9457 Problem Details with a stable extension `code`, a `traceId`, and `e
 | 401 | `authentication_required` | No valid admin identity. |
 | 403 | `forbidden` | Identity lacks the required role. |
 | 404 | `not_found` | Resource does not exist or is not visible. |
-| 409 | `active_run_exists`, `integration_disabled`, `run_not_retryable` | State conflicts with action. |
+| 409 | `active_run_exists`, `integration_disabled`, `run_not_retryable`, `run_not_cancellable` | State conflicts with action. |
 | 412 | `precondition_failed` | `If-Match` version is stale. |
 | 428 | `precondition_required` | `If-Match` is missing on an update or delete. |
 | 422 | `invalid_configuration` | Supported request shape violates configuration rules. |

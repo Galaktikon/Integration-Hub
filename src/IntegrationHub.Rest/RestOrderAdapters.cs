@@ -160,6 +160,9 @@ internal sealed class RestClient
             408 or 429 or >= 500 => ConnectorErrorCategory.Transient,
             _ => ConnectorErrorCategory.Permanent
         };
+        var retryAfter = response.Headers.RetryAfter?.Delta;
+        if (retryAfter is null && response.Headers.RetryAfter?.Date is { } date)
+            retryAfter = date - DateTimeOffset.UtcNow;
         return new ConnectorException(category, status switch
         {
             401 or 403 => "connector_authentication_failed",
@@ -167,6 +170,6 @@ internal sealed class RestClient
             499 => "connector_timeout",
             503 => "service_unavailable",
             _ => $"http_{status}"
-        }, status, response.Headers.RetryAfter?.Delta);
+        }, status, retryAfter);
     }
 }

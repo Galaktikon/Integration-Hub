@@ -417,6 +417,10 @@ namespace IntegrationHub.Infrastructure.Migrations
                     b.Property<Guid>("IntegrationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("LastErrorCategory")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<string>("LastErrorCode")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
