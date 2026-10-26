@@ -1,6 +1,6 @@
 # Architecture
 
-Implementation note (Phase 3): the combined process now queues and executes manual runs, checkpoints pages, stores record outcomes, and reclaims expired runs. The retry scheduling, cancellation, interval scheduler, and complete fencing of stale worker writes described below are Phase 4 design targets.
+Implementation note (Phase 4): the combined process queues and executes manual runs, checkpoints pages, stores record outcomes and attempts, schedules retries, supports cancellation and explicit recovery, and fences stale worker writes. The interval scheduler and operations UI remain Phase 5 work.
 
 Status: Phase 0 baseline, 2026-10-26. See [ADR 0001](adr/0001-modular-monolith.md) for the process decision.
 
@@ -59,12 +59,12 @@ Mapping configuration is JSONB with `schemaVersion: 1`, a fixed field-path gramm
 ## Run and recovery flow
 
 1. An authorized API request validates the enabled integration and commits a `queued` run with its configuration snapshot. A PostgreSQL partial unique index rejects a second active run for the integration. The API returns `202` only after commit.
-2. The worker transactionally claims a queued run, assigns a lease owner and increments a fencing generation. All later worker writes use `WHERE id = ? AND lease_generation = ? AND lease_owner = ?` and verify that one row changed.
+2. The worker atomically claims a queued or expired run, assigns a lease owner and increments a fencing generation. Each later worker write locks the run row, checks the owner, generation, status, and expiry, then commits its checkpoint or outcome in that same transaction. Lease renewal is conditional on the same ownership fields.
 3. The source returns a page with a snapshot token, request cursor, next cursor, and stable source IDs. The worker writes the page and all record work items in one transaction before advancing the run checkpoint. If it crashes before this commit, it refetches the same page. A duplicate source ID within a source snapshot is treated as a source contract error, never silently counted twice.
 4. The worker maps and validates each persisted record. Invalid data becomes a terminal record failure. Before a valid record is sent, a `started` attempt commits. The write uses the stable key `integrationId:sourceRecordId` and a source version or canonical payload hash. The demo ERP enforces `(integration_id, source_record_id)` uniqueness and returns `created`, `updated`, or `unchanged`. Recovery marks an unfinished attempt `uncertain` before replay.
-5. An uncertain response, timeout, 429, or 5xx error records an attempt and `nextAttemptAtUtc`. The worker does not sleep through long retry delays. It claims eligible records later, up to the configured budget. `Retry-After` is honored within the run deadline.
+5. An uncertain response, timeout, 429, or 5xx error records an attempt and `nextAttemptAtUtc`. The worker releases its lease until the persisted retry time, then claims eligible work later, up to the configured budget. `Retry-After` is considered within the configured maximum delay and run deadline.
 6. Once all source pages and eligible record work are settled, the worker derives counters from final record states and transitions the run to `completed` or `completed_with_errors`. A source-wide failure or exhausted infrastructure retry budget makes the run `failed` while preserving completed records and the checkpoint.
-7. On startup and during polling, a worker reclaims runs with expired leases. It increments the fencing generation, resumes persisted records first, then refetches the next uncommitted page. An old worker's late database update fails its generation check. Repeated destination HTTP writes use the same identity and are safe after a lost response.
+7. On graceful shutdown the worker releases an active lease for prompt continuation. On startup and during polling, a worker reclaims runs with expired leases. It increments the fencing generation, resumes persisted records first, then refetches the next uncommitted page. An old worker's late database update fails its generation check. Repeated destination HTTP writes use the same identity and are safe after a lost response.
 
 Manual `POST /runs/{id}/retry` applies to a `failed` run caused by a retryable source, destination, or infrastructure error. It requeues that same run, increments a recovery generation, and gives failed transient records a new bounded attempt budget. Successful and permanent-data records remain settled. It continues from the durable page checkpoint using the original source snapshot and config. If no page was fetched, the source establishes a snapshot on its first successful response. Every recovery action is in `sync_run_event`. `completed_with_errors` from permanent data errors needs a corrected source/configuration and a new manual run. The simulator retains snapshot tokens long enough for the demo; a real connector lacking stable snapshots would need a documented rescan and reconciliation policy.
 
@@ -76,7 +76,7 @@ Schedules use UTC intervals with a minimum interval of five minutes. The worker 
 
 Adapters normalize errors as `transient`, `rateLimited`, `permanentData`, `permanentConfiguration`, `authentication`, `concurrencyConflict`, `infrastructure`, or `cancelled`. HTTP status alone does not determine the category. APIs use RFC 9457 Problem Details for request failures and stable error codes for record failures. Logs include run ID, record ID, connector ID, attempt, and trace ID; they exclude secret values and raw payloads. Metrics cover run duration, records, retries, failures, and expired-lease recovery.
 
-Admin write operations and run history require authentication. Development uses a local seeded identity; the hosted demo uses a protected admin identity with credentials supplied outside Git. Demo fault injection and reset endpoints require admin access. Database URLs, encryption keys, and API keys are Render environment secrets. Use separate low-privilege Neon roles for hub runtime, migrations, and simulator. The hub allows outbound HTTP only to configured demo hosts in the hosted environment.
+Admin write operations and run history will require authentication in Phase 5. Until then the hub starts only in `Development` and must not be publicly exposed. Demo fault injection and reset endpoints require an admin key. Database URLs, encryption keys, and API keys will be Render environment secrets. Use separate low-privilege Neon roles for hub runtime, migrations, and simulator. The hub allows outbound HTTP only to configured demo hosts in the hosted environment.
 
 ## Planned repository and startup
 
@@ -93,7 +93,7 @@ deploy/                        Docker and Render definitions
 docs/                          specifications and ADRs
 ```
 
-Phase 1 will make `docker compose up --build` start PostgreSQL, hub, and simulator; later the UI joins the Compose profile. A dedicated migration command applies schema changes, and a development-only seed command loads deterministic synthetic orders. The reset command requires a demo-only guard and never runs automatically at application startup. CI will build, test, and verify migrations from an empty database.
+`docker compose up --build` starts PostgreSQL, hub, and simulator; the UI joins later. A dedicated migration command applies schema changes, and development-only seed commands load deterministic synthetic orders. The reset command requires a demo-only guard and never runs automatically at application startup. CI builds, tests, and verifies migrations from an empty database.
 
 ## Hosting references
 

@@ -78,6 +78,7 @@ public sealed class HubDbContext(DbContextOptions<HubDbContext> options) : DbCon
             e.Property(x => x.NextPageCursor).HasMaxLength(256);
             e.Property(x => x.LeaseOwner).HasMaxLength(160);
             e.Property(x => x.LastErrorCode).HasMaxLength(100);
+            e.Property(x => x.LastErrorCategory).HasMaxLength(60);
             e.HasOne<Integration>().WithMany().HasForeignKey(x => x.IntegrationId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.IntegrationId).IsUnique().HasFilter("\"Status\" IN ('queued', 'running')");
             e.HasIndex(x => new { x.Status, x.CreatedAtUtc });

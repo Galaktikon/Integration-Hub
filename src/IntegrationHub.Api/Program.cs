@@ -21,6 +21,7 @@ builder.Services.AddSingleton(_ => new SecretProtector(
     builder.Configuration["Security:EncryptionKey"] ?? throw new InvalidOperationException("Security:EncryptionKey is required.")));
 builder.Services.AddHostedService<WorkerHost>();
 builder.Services.AddScoped<SyncProcessor>();
+builder.Services.AddScoped<RunLease>();
 builder.Services.AddScoped<IOrderConnectorFactory, RestOrderConnectorFactory>();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
