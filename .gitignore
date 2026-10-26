@@ -1,0 +1,23 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Frontend
+**/node_modules/
+**/dist/
+**/coverage/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+**/appsettings.Development.local.json
+**/secrets.json
+
+# Tools
+.vs/
+.vscode/
+.idea/
+TestResults/
+.tools/
