@@ -26,9 +26,9 @@ The diagram shows logical modules inside one hub process. The demo systems are a
 
 - Build one .NET 10 hub image. ASP.NET Core hosts controllers or minimal API routes and a `BackgroundService` for scheduling and sync execution. A single Render web service starts both through one process.
 - Build the React/TypeScript UI as a Render static site. The UI calls the versioned hub API over HTTPS; CORS permits only the configured UI origin.
-- Run the hub on a paid, always-on Render web instance. A free instance sleeps after inactivity, which would halt scheduled polling and pending retries. The worker does not depend on browser traffic.
+- Run the hub on a free Render web instance for this public demo. Render sleeps it after inactivity, pausing scheduled polling and pending retries until an incoming request wakes the service. The persisted run state and lease support continuation after restart, but unattended schedules are not time-guaranteed on the free tier.
 - Deploy the demo systems as one separate Render web service with distinct `/commerce` and `/erp` HTTP contracts. Local Docker Compose starts it as a separate service.
-- Use Neon PostgreSQL for hosted durable state. Use local PostgreSQL under Compose. Keep hub and demo data in separate schemas and roles. Use TLS, bounded Npgsql pools, and reconnect after transient database disruption. Poll due schedules about once per minute and eligible work more frequently while a run is active. This periodic polling may keep Neon compute active, so measure compute use and budget for it.
+- Use Neon PostgreSQL Free for hosted durable state. Use local PostgreSQL under Compose. Keep hub and demo data in separate schemas and roles. Use TLS, bounded Npgsql pools, and reconnect after transient database disruption. While the hub is awake, poll due schedules about once per minute and eligible work more frequently while a run is active. This periodic polling may keep Neon compute active, so monitor the Free plan allowance.
 - Apply EF Core migrations in a controlled deployment step using a direct Neon connection and a migration role. The hub process does not auto-migrate on startup. Roll out backward-compatible schema changes before the application version that needs them.
 - Store all durable work in PostgreSQL. Render instance files hold no run or record state.
 

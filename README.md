@@ -1,6 +1,6 @@
 # Enterprise Integration Hub
 
-A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. The local demo includes the .NET 10 API and worker, PostgreSQL-backed sync and recovery, a database-backed scheduler, administrator authentication, and a React operations dashboard. Phase 6 adds browser smoke tests, observability, a Render Blueprint, and a hosted-demo runbook. Public deployment is pending Neon and Render account setup and hosted verification.
+A portfolio-scale integration platform for synthetic Commerce Orders to ERP Orders. The local demo includes the .NET 10 API and worker, PostgreSQL-backed sync and recovery, a database-backed scheduler, administrator authentication, and a React operations dashboard. Phase 6 adds browser smoke tests, observability, a Render Blueprint, and a hosted-demo runbook. Neon and Render accounts exist; project creation, migrations, free service creation, and hosted verification are pending.
 
 ## Current architecture
 
@@ -131,7 +131,7 @@ CI migrates a fresh PostgreSQL database, checks for model drift, builds, and tes
 
 ## Hosted deployment
 
-The [Phase 6 deployment runbook](docs/phase6-deployment.md) gives the ordered Neon and Render setup, migration and role grants, secret configuration, synthetic seed/reset, hosted smoke tests, and recovery demonstration. The public demo URL will be added only after deployment and verification. The development credentials in this repository must never be used for hosted deployment.
+The [Phase 6 deployment runbook](docs/phase6-deployment.md) gives manual creation steps for one Neon Free project, two Render Free web services (combined API/worker and synthetic simulator), and one free static site, plus migration, secret, seed/reset, smoke-test, and recovery instructions. The public demo URL will be added only after deployment and verification. The development credentials in this repository must never be used for hosted deployment.
 
 ## Visual walkthrough
 

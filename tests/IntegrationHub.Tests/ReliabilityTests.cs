@@ -155,6 +155,10 @@ public sealed class ReliabilityTests
         var runId = await StartAsync(client, integrationId);
         var state = await WaitTerminalAsync(client, runId);
         Assert.Equal("completed_with_errors", state.GetProperty("status").GetString());
+        var sourceRetries = state.GetProperty("sourceRetries").EnumerateArray().ToArray();
+        Assert.Single(sourceRetries);
+        Assert.Equal("service_unavailable", sourceRetries[0].GetProperty("code").GetString());
+        Assert.Equal(1, sourceRetries[0].GetProperty("attempt").GetInt32());
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<HubDbContext>();
         Assert.Equal(1, await db.SyncRunEvents.CountAsync(x => x.RunId == runId && x.EventType == "source_retry_scheduled"));
