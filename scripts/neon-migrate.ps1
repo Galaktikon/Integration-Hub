@@ -6,8 +6,14 @@ function Set-SecretEnvironmentVariable([string]$Name, [string]$Prompt) {
     $secret = Read-Host $Prompt -AsSecureString
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
     try {
-        [Environment]::SetEnvironmentVariable($Name,
-            [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer), 'Process')
+        $value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        if ($value -match '^\s*postgres(?:ql)?://') {
+            throw "$Prompt must use Npgsql key/value syntax: Host=<direct-host>;Port=5432;Database=<database>;Username=<owner>;Password=<password>;SSL Mode=Require. Neon postgresql:// URLs are not accepted."
+        }
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            throw "$Prompt cannot be empty."
+        }
+        [Environment]::SetEnvironmentVariable($Name, $value, 'Process')
     } finally {
         [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
     }

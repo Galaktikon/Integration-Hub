@@ -12,6 +12,7 @@ public sealed record RunSnapshot(
     ConnectorConfiguration Source, string SourceEncryptedSecret,
     ConnectorConfiguration Destination, string DestinationEncryptedSecret,
     MappingConfiguration Mapping, ValidationConfiguration Validation, RetryPolicy RetryPolicy);
+public sealed record SourceRetryDetails(string Code, string Category, int Attempt);
 
 public static class RunEndpoints
 {
@@ -74,6 +75,14 @@ public static class RunEndpoints
         if (run is null) return Error(404, "not_found", "Run was not found.");
         var statuses = await db.SyncRecords.AsNoTracking().Where(x => x.RunId == runId)
             .GroupBy(x => x.Status).Select(x => new { Status = x.Key, Count = x.Count() }).ToListAsync(ct);
+        var retryEvents = await db.SyncRunEvents.AsNoTracking()
+            .Where(x => x.RunId == runId && x.EventType == "source_retry_scheduled")
+            .OrderBy(x => x.OccurredAtUtc).ToListAsync(ct);
+        var sourceRetries = retryEvents.Select(x =>
+        {
+            var details = JsonSerializer.Deserialize<SourceRetryDetails>(x.SafeDetailsJson, Json)!;
+            return new { x.OccurredAtUtc, details.Code, details.Attempt };
+        }).ToList();
         int Count(string status) => statuses.FirstOrDefault(x => x.Status == status)?.Count ?? 0;
         var policy = JsonSerializer.Deserialize<RunSnapshot>(run.ConfigSnapshotJson, Json)!.RetryPolicy;
         var actions = new List<string>();
@@ -90,7 +99,7 @@ public static class RunEndpoints
                 pending = Count("pending") + Count("processing") + Count("retry_wait") },
             run.SourceComplete, allowedActions = actions, run.CreatedAtUtc, run.StartedAtUtc,
             run.FinishedAtUtc, run.LastErrorCode, run.LastErrorCategory,
-            run.NextSourceAttemptAtUtc, run.CancellationRequestedAtUtc
+            run.NextSourceAttemptAtUtc, run.CancellationRequestedAtUtc, sourceRetries
         });
     }
 

@@ -15,6 +15,7 @@ export type Run = RunSummary & {
   counts: { fetched: number; created: number; updated: number; unchanged: number; failedPermanent: number; failedRetryable: number; pending: number }
   sourceComplete: boolean; allowedActions: string[]; lastErrorCode: string | null; lastErrorCategory: string | null
   nextSourceAttemptAtUtc: string | null; startedAtUtc: string | null; finishedAtUtc: string | null
+  sourceRetries: { occurredAtUtc: string; code: string; attempt: number }[]
 }
 export type RecordOutcome = { recordId: string; sourceRecordId: string; status: string; attemptCount: number; errorCategory: string | null; errorCode: string | null; safeErrorMessage: string | null; nextAttemptAtUtc: string | null }
 export type Attempt = { attemptNumber: number; outcome: string; httpStatus: number | null; errorCode: string | null; startedAtUtc: string; durationMs: number | null }
