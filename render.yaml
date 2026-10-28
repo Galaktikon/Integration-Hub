@@ -74,6 +74,11 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         sync: false
+      # Public demo credentials are embedded in the static bundle and shown on the login page.
+      - key: VITE_DEMO_USERNAME
+        sync: false
+      - key: VITE_DEMO_PASSWORD
+        sync: false
     headers:
       - path: /*
         name: X-Content-Type-Options
