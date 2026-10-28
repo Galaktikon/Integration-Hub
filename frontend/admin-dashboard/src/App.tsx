@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { all, api, setToken, type Attempt, type Connector, type Integration, type RecordOutcome, type Run, type RunSummary, type Schedule } from './api'
 import { OperationsView, RunDetails } from './DashboardViews'
 import IntegrationWizard from './IntegrationWizard'
@@ -6,12 +6,14 @@ import IntegrationWizard from './IntegrationWizard'
 type Tab = 'overview' | 'integrations' | 'connectors' | 'runs'
 const timestamp = (value?: string | null) => value ? new Date(value).toLocaleString() : '—'
 const tone = (status: string) => status.includes('fail') || status === 'completed_with_errors' ? 'danger' : ['completed', 'created', 'enabled'].includes(status) ? 'success' : ['running', 'queued'].includes(status) ? 'active' : 'muted'
+const demoUsername = import.meta.env.VITE_DEMO_USERNAME || (import.meta.env.DEV ? 'admin' : '')
+const demoPassword = import.meta.env.VITE_DEMO_PASSWORD || (import.meta.env.DEV ? 'local-demo-password' : '')
 
 function Status({ value }: { value: string }) { return <span className={`status ${tone(value)}`}>{value.replaceAll('_', ' ')}</span> }
 
 export default function App() {
   const [token, updateToken] = useState<string | null>(null)
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState(demoUsername || 'admin')
   const [password, setPassword] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
   const [connectors, setConnectors] = useState<Connector[]>([])
@@ -29,6 +31,8 @@ export default function App() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const startupAt = useRef(0)
   const [showConnectorEditor, setShowConnectorEditor] = useState(false)
   const [showIntegrationEditor, setShowIntegrationEditor] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'retry' | 'cancel' | null>(null)
@@ -45,15 +49,23 @@ export default function App() {
       setRuns(histories.flat().sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc)))
       setError('')
     } catch (e) { setError((e as Error).message) }
-    finally { setLoading(false) }
+    finally {
+      setLoading(false)
+      if (startupAt.current) {
+        const remaining = Math.max(0, 900 - (Date.now() - startupAt.current))
+        if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining))
+        startupAt.current = 0
+        setStarting(false)
+      }
+    }
   }, [token])
 
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
-    if (!token) return
+    if (!token || starting) return
     const timer = window.setInterval(() => { void refresh() }, 10000)
     return () => window.clearInterval(timer)
-  }, [token, refresh])
+  }, [token, refresh, starting])
   useEffect(() => {
     if (!token || !selectedRun) return
     let active = true
@@ -87,14 +99,14 @@ export default function App() {
   }
 
   async function login(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError('')
+    event.preventDefault(); setBusy(true); setError(''); setStarting(true); startupAt.current = Date.now()
     try {
       const result = await api<{ accessToken: string }>('/auth/login', 'POST', { username, password })
       setToken(result.value.accessToken); updateToken(result.value.accessToken); setPassword('')
-    } catch (e) { setError((e as Error).message) }
+    } catch (e) { startupAt.current = 0; setStarting(false); setError((e as Error).message) }
     finally { setBusy(false) }
   }
-  function logout() { setToken(null); updateToken(null); setRun(null); setRuns([]); setRecords([]); setTab('overview') }
+  function logout() { startupAt.current = 0; setStarting(false); setToken(null); updateToken(null); setRun(null); setRuns([]); setRecords([]); setTab('overview') }
   async function startRun(id: string) {
     await action(async () => {
       const created = await api<{ runId: string }>(`/integrations/${id}/runs`, 'POST')
@@ -128,7 +140,8 @@ export default function App() {
     }, 'Connector responded with the expected capabilities.')
   }
 
-  if (!token) return <div className="login-shell"><div className="login-art"><div className="brand-mark">↗</div><p className="eyebrow">ENTERPRISE INTEGRATION HUB</p><h1>Every record.<br />A clear path forward.</h1><p>Operate reliable Commerce to ERP flows from one place.</p><div className="orbit orbit-one"/><div className="orbit orbit-two"/></div><form className="login-card" onSubmit={login}><p className="eyebrow">OPERATIONS ACCESS</p><h2>Sign in</h2><p className="subtle">Use your administrator credentials.</p><label>Username<input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></label>{error && <p className="message error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in →'}</button><p className="fine-print">Session stays in this browser tab and expires after eight hours.</p></form></div>
+  if (starting) return <div className="startup-screen" role="status" aria-live="polite"><div className="startup-card"><span className="brand-mark" aria-hidden="true">↗</span><span className="startup-spinner" aria-hidden="true"/><p className="eyebrow">ENTERPRISE INTEGRATION HUB</p><h1>Connecting to the demo</h1><p>The server is starting up. This may take a few seconds, or up to a minute if it was asleep.</p></div></div>
+  if (!token) return <div className="login-shell"><div className="login-art"><div className="brand-mark">↗</div><p className="eyebrow">ENTERPRISE INTEGRATION HUB</p><h1>Every record.<br />A clear path forward.</h1><p>Operate reliable Commerce to ERP flows from one place.</p><div className="orbit orbit-one"/><div className="orbit orbit-two"/></div><form className="login-card" onSubmit={login}><p className="eyebrow">OPERATIONS ACCESS</p><h2>Sign in</h2><p className="subtle">Use your administrator credentials.</p><label>Username<input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></label>{demoUsername && demoPassword && <p className="demo-credentials">Test login: <strong>{demoUsername}</strong> / <strong>{demoPassword}</strong></p>}{error && <p className="message error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in →'}</button><p className="fine-print">Session stays in this browser tab and expires after eight hours.</p></form></div>
 
   const selected = integrations.find(x => x.id === selectedIntegration)
   const openIntegration = (id: string) => { setSelectedIntegration(id); setTab('integrations') }
